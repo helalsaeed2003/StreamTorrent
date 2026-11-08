@@ -1,4 +1,3 @@
-const path = require('path')
 const { ipcRenderer } = require('electron')
 
 const TorrentSummary = require('../lib/torrent-summary')
@@ -70,32 +69,34 @@ module.exports = class TorrentController {
       torrentSummary.files = torrentInfo.files
     }
     if (!torrentSummary.selections) {
-      torrentSummary.selections = torrentSummary.files.map((x) => true)
+      // Nothing is downloaded until the user plays a file
+      torrentSummary.selections = torrentSummary.files.map(() => false)
     }
     dispatch('update')
 
-    // Save the .torrent file, if it hasn't been saved already
-    if (!torrentSummary.torrentFileName) ipcRenderer.send('wt-save-torrent-file', torrentKey)
+    // Save the .torrent file, if it hasn't been saved already. This is what
+    // lets the file list stay browsable while the torrent itself is idle.
+    if (!torrentSummary.torrentFileName) {
+      ipcRenderer.send('wt-save-torrent-file', torrentKey)
+    } else {
+      // We already have everything we need to browse this torrent offline, so
+      // put it back to sleep rather than leave it connected to peers
+      dispatch('idleTorrent', torrentSummary.infoHash)
+    }
 
-    // Auto-generate a poster image, if it hasn't been generated already
-    if (!torrentSummary.posterFileName) ipcRenderer.send('wt-generate-torrent-poster', torrentKey)
+    // Note: poster images are deliberately not generated. Making one means
+    // downloading part of a video or image file, and nothing is downloaded
+    // unless the user asks for it by playing it.
   }
 
   torrentDone (torrentKey, torrentInfo) {
-    // Update the torrent summary
+    // "Done" here means the file being previewed has finished buffering, not
+    // that a download completed: the data is deleted as soon as playback stops.
+    // So don't switch the torrent to seeding and don't congratulate the user.
     const torrentSummary = this.getTorrentSummary(torrentKey)
-    torrentSummary.status = 'seeding'
+    if (!torrentSummary) return
 
-    // Notify the user that a torrent finished, but only if we actually DL'd at least part of it.
-    // Don't notify if we merely finished verifying data files that were already on disk.
-    if (torrentInfo.bytesReceived > 0) {
-      if (!this.state.window.isFocused) {
-        this.state.dock.badge += 1
-      }
-      showDoneNotification(torrentSummary)
-      ipcRenderer.send('downloadFinished', getTorrentPath(torrentSummary))
-    }
-
+    console.log('finished buffering torrent %s', torrentSummary.infoHash)
     dispatch('update')
   }
 
@@ -137,6 +138,10 @@ module.exports = class TorrentController {
     const torrentSummary = this.getTorrentSummary(torrentKey)
     torrentSummary.torrentFileName = torrentFileName
     dispatch('stateSave')
+
+    // The file list is now saved, so the torrent can be browsed without being
+    // connected. Stop it unless the user is previewing something from it.
+    dispatch('idleTorrent', torrentSummary.infoHash)
   }
 
   torrentPosterSaved (torrentKey, posterFileName) {
@@ -154,6 +159,8 @@ module.exports = class TorrentController {
 
   torrentServerRunning (serverInfo) {
     this.state.server = serverInfo
+    // The video engine may have been waiting for a URL to play
+    dispatch('mpvMaybeLoad')
   }
 
   // Gets a torrent summary {name, infoHash, status} from state.saved.torrents
@@ -161,26 +168,4 @@ module.exports = class TorrentController {
   getTorrentSummary (torrentKey) {
     return TorrentSummary.getByKey(this.state, torrentKey)
   }
-}
-
-function getTorrentPath (torrentSummary) {
-  let itemPath = TorrentSummary.getFileOrFolder(torrentSummary)
-  if (torrentSummary.files.length > 1) {
-    itemPath = path.dirname(itemPath)
-  }
-  return itemPath
-}
-
-function showDoneNotification (torrent) {
-  const notif = new window.Notification('Download Complete', {
-    body: torrent.name,
-    silent: true
-  })
-
-  notif.onclick = () => {
-    ipcRenderer.send('show')
-  }
-
-  // Only play notification sound if player is inactive
-  if (this.state.playing.isPaused) sound.play('DONE')
 }

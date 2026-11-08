@@ -7,6 +7,9 @@ const { dispatch } = require('../lib/dispatcher')
 const { TorrentKeyNotFoundError } = require('../lib/errors')
 const sound = require('../lib/sound')
 const TorrentSummary = require('../lib/torrent-summary')
+const FileTree = require('../lib/file-tree')
+const PlaybackPosition = require('../lib/playback-position')
+const { formatPosition } = require('../lib/time')
 
 const instantIoRegex = /^(https:\/\/)?instant\.io\/#/
 
@@ -35,11 +38,40 @@ module.exports = class TorrentListController {
     }
 
     const torrentKey = this.state.nextTorrentKey++
-    const path = this.state.saved.prefs.downloadPath
 
-    ipcRenderer.send('wt-start-torrenting', torrentKey, torrentId, path)
+    // Add it into the temp folder. Adding a torrent only fetches its metadata -
+    // no file is selected, so no file data is downloaded - and once the
+    // .torrent file is saved the torrent is put back to sleep. The entry itself
+    // stays in the list until the user removes it.
+    const tempPath = TorrentSummary.getTempPath(
+      null, this.state.nextStreamKey++, this.state.tempPath)
+
+    ipcRenderer.send('wt-start-torrenting', torrentKey, torrentId, tempPath)
 
     dispatch('backToList')
+  }
+
+  // A torrent with no selected files has no reason to stay connected: it is just
+  // sitting in the list waiting to be browsed. Stop it and clear its scratch
+  // folder, keeping the saved file list so it stays browsable.
+  idleTorrent (infoHash) {
+    const state = this.state
+    const torrentSummary = TorrentSummary.getByKey(state, infoHash)
+    if (!torrentSummary || !torrentSummary.infoHash) return
+    if (torrentSummary.status === 'paused') return
+
+    // Never touch the torrent we're previewing from
+    if (state.playing.infoHash === torrentSummary.infoHash) return
+    if (state.streaming && state.streaming.infoHash === torrentSummary.infoHash) return
+
+    // Somebody explicitly asked for a file in this torrent
+    if (torrentSummary.selections && torrentSummary.selections.some(Boolean)) return
+
+    console.log('idling torrent %s: no files selected', torrentSummary.infoHash)
+    torrentSummary.status = 'paused'
+    // Nothing has been downloaded yet, so disconnect entirely rather than sit
+    // connected to peers. The saved file list keeps the folder tree browsable.
+    ipcRenderer.send('wt-stop-torrenting', torrentSummary.infoHash)
   }
 
   // Shows the Create Torrent page with options to seed a given file or folder
@@ -76,41 +108,29 @@ module.exports = class TorrentListController {
     state.location.cancel()
   }
 
-  // Starts downloading and/or seeding a given torrentSummary.
+  // Starts a given torrentSummary. Only the files in s.selections are fetched,
+  // which is nothing at all unless the user has pressed play on something.
   startTorrentingSummary (torrentKey) {
     const s = TorrentSummary.getByKey(this.state, torrentKey)
     if (!s) throw new TorrentKeyNotFoundError(torrentKey)
 
-    // New torrent: give it a path
-    if (!s.path) {
-      // Use Downloads folder by default
-      s.path = this.state.saved.prefs.downloadPath
-      return start()
-    }
+    // Everything streams into a temp folder inside the program's own folder,
+    // cleared when the app starts and quits. There is no download folder to
+    // check for, so no 'path-missing' check.
+    // Resolved fresh each time, so a new temp folder takes effect from the
+    // next video played
+    s.path = TorrentSummary.getTempPath(s, this.state.nextStreamKey++, this.state.tempPath)
+    delete s.error
+    delete s.fileModtimes
 
-    const fileOrFolder = TorrentSummary.getFileOrFolder(s)
-
-    // New torrent: metadata not yet received
-    if (!fileOrFolder) return start()
-
-    // Existing torrent: check that the path is still there
-    fs.stat(fileOrFolder, err => {
-      if (err) {
-        s.error = 'path-missing'
-        dispatch('backToList')
-        return
-      }
-      start()
-    })
-
-    function start () {
-      ipcRenderer.send('wt-start-torrenting',
-        s.torrentKey,
-        TorrentSummary.getTorrentId(s),
-        s.path,
-        s.fileModtimes,
-        s.selections)
-    }
+    // The info hash lets the WebTorrent process notice the torrent is already
+    // running and reuse it, instead of starting it from nothing again
+    ipcRenderer.send('wt-start-torrenting',
+      s.torrentKey,
+      TorrentSummary.getTorrentId(s),
+      s.path,
+      s.infoHash,
+      s.selections)
   }
 
   setGlobalTrackers (globalTrackers) {
@@ -191,7 +211,88 @@ module.exports = class TorrentListController {
     // Let the WebTorrent process know to start or stop fetching that file
     if (torrentSummary.status !== 'paused') {
       ipcRenderer.send('wt-select-files', infoHash, torrentSummary.selections)
+    } else if (torrentSummary.selections.some(Boolean)) {
+      // The torrent was asleep. Wake it up so the file can actually arrive.
+      torrentSummary.status = 'new'
+      this.startTorrentingSummary(torrentSummary.torrentKey)
     }
+  }
+
+  // Right-clicking a file: clear where we got to, or change whether it counts
+  // as watched
+  openFileContextMenu (infoHash, index) {
+    const torrentSummary = TorrentSummary.getByKey(this.state, infoHash)
+    if (!torrentSummary || !torrentSummary.files) return
+    const file = torrentSummary.files[index]
+    if (!file) return
+
+    const menu = new remote.Menu()
+
+    if (PlaybackPosition.hasProgress(file)) {
+      menu.append(new remote.MenuItem({
+        label: `Clear progress (${formatPosition(file.currentTime)})`,
+        click: () => dispatch('clearFileProgress', infoHash, index)
+      }))
+    }
+
+    menu.append(new remote.MenuItem({
+      label: PlaybackPosition.isWatched(file) ? 'Mark as unwatched' : 'Mark as watched',
+      click: () => dispatch('toggleFileWatched', infoHash, index)
+    }))
+
+    menu.popup({ window: remote.getCurrentWindow() })
+  }
+
+  clearFileProgress (infoHash, index) {
+    const torrentSummary = TorrentSummary.getByKey(this.state, infoHash)
+    if (!torrentSummary || !torrentSummary.files) return
+    PlaybackPosition.clearProgress(torrentSummary.files[index])
+    dispatch('stateSaveImmediate')
+  }
+
+  toggleFileWatched (infoHash, index) {
+    const torrentSummary = TorrentSummary.getByKey(this.state, infoHash)
+    if (!torrentSummary || !torrentSummary.files) return
+    const file = torrentSummary.files[index]
+    if (!file) return
+
+    if (PlaybackPosition.isWatched(file)) {
+      PlaybackPosition.clearProgress(file)
+      delete file.played
+    } else {
+      PlaybackPosition.markFinished(file)
+    }
+    dispatch('stateSaveImmediate')
+  }
+
+  // Open or close a folder in a torrent's file tree.
+  // Which folders are open is saved, so the list looks the same next time the
+  // app runs, not just when coming back from the player.
+  toggleFolder (infoHash, folderKey) {
+    const expanded = this.state.saved.folderExpanded
+    const key = FileTree.getFolderKey(infoHash, folderKey)
+    if (expanded[key]) delete expanded[key]
+    else expanded[key] = true
+    dispatch('stateSave')
+  }
+
+  // Open or close every folder of one torrent at once
+  setAllFoldersExpanded (infoHash, expanded) {
+    const torrentSummary = TorrentSummary.getByKey(this.state, infoHash)
+    if (!torrentSummary) return
+
+    const open = this.state.saved.folderExpanded
+    const sortByName = this.state.saved.prefs.sortByName
+    const walk = (node) => {
+      node.folders.forEach((folder) => {
+        const key = FileTree.getFolderKey(infoHash, folder.key)
+        if (expanded) open[key] = true
+        else delete open[key]
+        walk(folder)
+      })
+    }
+    walk(FileTree.getTree(torrentSummary, sortByName))
+    dispatch('stateSave')
   }
 
   confirmDeleteTorrent (infoHash, deleteData) {
@@ -301,6 +402,20 @@ module.exports = class TorrentListController {
       type: 'separator'
     }))
 
+    if (torrentSummary.files) {
+      menu.append(new remote.MenuItem({
+        label: 'Expand All Folders',
+        click: () => dispatch('setAllFoldersExpanded', torrentSummary.infoHash, true)
+      }))
+      menu.append(new remote.MenuItem({
+        label: 'Collapse All Folders',
+        click: () => dispatch('setAllFoldersExpanded', torrentSummary.infoHash, false)
+      }))
+      menu.append(new remote.MenuItem({
+        type: 'separator'
+      }))
+    }
+
     const sortedByName = this.state.saved.prefs.sortByName
     menu.append(new remote.MenuItem({
       label: `${sortedByName ? '✓ ' : ''}Sort by Name`,
@@ -402,6 +517,9 @@ function showItemInFolder (torrentSummary) {
 }
 
 function deleteTorrentFile (torrentSummary, deleteData) {
+  // The user removed this torrent from the list, so its temp files go too:
+  // anything in there is a preview, and the entry is not coming back.
+  ipcRenderer.send('wt-delete-torrent-data', torrentSummary.infoHash)
   ipcRenderer.send('wt-stop-torrenting', torrentSummary.infoHash)
 
   // remove torrent and poster file

@@ -6,10 +6,40 @@ const LinearProgress = require('material-ui/LinearProgress').default
 
 const TorrentSummary = require('../lib/torrent-summary')
 const TorrentPlayer = require('../lib/torrent-player')
+const FileTree = require('../lib/file-tree')
+const PlaybackPosition = require('../lib/playback-position')
 const { dispatcher } = require('../lib/dispatcher')
-const { calculateEta } = require('../lib/time')
+const { calculateEta, formatPosition } = require('../lib/time')
 
 module.exports = class TorrentList extends React.Component {
+  // The list scrolls inside .content, which is owned by the app shell. Watch it
+  // so we always know where the user was, and put them back there when they
+  // come back from the player instead of jumping to the top.
+  componentDidMount () {
+    this.scrollElem = document.querySelector('.content')
+    if (!this.scrollElem) return
+
+    this.handleScroll = () => {
+      this.props.state.listScrollTop = this.scrollElem.scrollTop
+    }
+    this.scrollElem.addEventListener('scroll', this.handleScroll)
+
+    const top = this.props.state.listScrollTop
+    if (!top) return
+    this.scrollElem.scrollTop = top
+    // ...and again once the browser has laid the rows out
+    window.requestAnimationFrame(() => {
+      if (this.scrollElem) this.scrollElem.scrollTop = top
+    })
+  }
+
+  componentWillUnmount () {
+    if (this.scrollElem && this.handleScroll) {
+      this.scrollElem.removeEventListener('scroll', this.handleScroll)
+    }
+    this.scrollElem = null
+  }
+
   render () {
     const state = this.props.state
 
@@ -25,6 +55,9 @@ module.exports = class TorrentList extends React.Component {
         </div>
       )
     }
+    const continueWatching = this.renderContinueWatching()
+    if (continueWatching) contents.push(continueWatching)
+
     const torrentElems = state.saved.torrents.map(
       (torrentSummary) => this.renderTorrent(torrentSummary)
     )
@@ -255,7 +288,9 @@ module.exports = class TorrentList extends React.Component {
     )
   }
 
-  // Show files, per-file download status and play buttons, and so on
+  // Show files grouped into folders, with per-file status and play buttons.
+  // Only open folders are rendered, so a torrent with thousands of files costs
+  // no more to draw than a torrent with ten.
   renderTorrentDetails (torrentSummary) {
     let filesElement
     if (torrentSummary.error || !torrentSummary.files) {
@@ -279,24 +314,16 @@ module.exports = class TorrentList extends React.Component {
         </div>
       )
     } else {
-      // We do know the files. List them and show download stats for each one
+      // We do know the files. Lay them out as a folder tree.
       const sortByName = this.props.state.saved.prefs.sortByName
-      const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
-      let fileRows = torrentSummary.files
-        .filter((file) => !file.path.includes('/.____padding_file/'))
-        .map((file, index) => ({ file, index }))
-
-      if (sortByName) {
-        fileRows = fileRows.sort((a, b) => collator.compare(a.file.name, b.file.name))
-      }
-
-      fileRows = fileRows.map((obj) => this.renderFileRow(torrentSummary, obj.file, obj.index))
+      const tree = FileTree.getTree(torrentSummary, sortByName)
+      const rows = this.renderTreeRows(torrentSummary, tree, 0, [])
 
       filesElement = (
         <div key='files' className='files'>
           <table>
             <tbody>
-              {fileRows}
+              {rows}
             </tbody>
           </table>
         </div>
@@ -310,34 +337,94 @@ module.exports = class TorrentList extends React.Component {
     )
   }
 
+  // Walks the folder tree and collects the rows that are currently visible:
+  // a folder's contents only show up once that folder has been opened
+  renderTreeRows (torrentSummary, node, depth, rows) {
+    const state = this.props.state
+    const infoHash = torrentSummary.infoHash
+
+    const expanded = state.saved.folderExpanded || {}
+    node.folders.forEach((folder) => {
+      const isExpanded = !!expanded[FileTree.getFolderKey(infoHash, folder.key)]
+      rows.push(this.renderFolderRow(torrentSummary, folder, depth, isExpanded))
+      if (isExpanded) this.renderTreeRows(torrentSummary, folder, depth + 1, rows)
+    })
+
+    node.files.forEach((entry) => {
+      rows.push(this.renderFileRow(torrentSummary, entry.file, entry.index, depth))
+    })
+
+    return rows
+  }
+
+  // A collapsible folder, like a row in a file explorer. Collapsed by default.
+  renderFolderRow (torrentSummary, node, depth, isExpanded) {
+    const infoHash = torrentSummary.infoHash
+    const fileCount = node.fileCount
+
+    return (
+      <tr
+        key={'folder-' + node.key}
+        className={'folder-row' + (isExpanded ? ' expanded' : '')}
+        onClick={dispatcher('toggleFolder', infoHash, node.key)}
+      >
+        <td className='col-icon' />
+        <td className='col-name' style={{ paddingLeft: indentFor(depth) }}>
+          <i className='icon chevron'>{isExpanded ? 'expand_more' : 'chevron_right'}</i>
+          <i className='icon folder'>{isExpanded ? 'folder_open' : 'folder'}</i>
+          <span className='folder-name'>{node.name}</span>
+        </td>
+        <td className='col-progress' />
+        <td className='col-size'>{fileCount === 1 ? '1 file' : fileCount + ' files'}</td>
+        <td className='col-select' />
+      </tr>
+    )
+  }
+
   // Show a single torrentSummary file in the details view for a single torrent
-  renderFileRow (torrentSummary, file, index) {
-    // First, find out how much of the file we've downloaded
-    // Are we even torrenting it?
-    const isSelected = torrentSummary.selections && torrentSummary.selections[index]
-    let isDone = false // Are we finished torrenting it?
+  renderFileRow (torrentSummary, file, index, depth) {
+    const state = this.props.state
+    const infoHash = torrentSummary.infoHash
+
+    // How much of the file do we have? This is only ever non-zero for the file
+    // being previewed right now: its data is deleted as soon as we're done.
+    let isDone = false
     let progress = ''
-    if (torrentSummary.progress && torrentSummary.progress.files &&
-        torrentSummary.progress.files[index]) {
-      const fileProg = torrentSummary.progress.files[index]
+    const fileProg = torrentSummary.progress &&
+      torrentSummary.progress.files &&
+      torrentSummary.progress.files[index]
+    if (fileProg && fileProg.numPieces > 0) {
       isDone = fileProg.numPiecesPresent === fileProg.numPieces
       progress = Math.floor(100 * fileProg.numPiecesPresent / fileProg.numPieces) + '%'
     }
 
-    // Second, for media files where we saved our position, show how far we got
+    // Is this the file we're downloading right now, and is it the one that was
+    // played last? The second is how the list shows where the user left off.
+    const isStreaming = !!state.streaming &&
+      state.streaming.infoHash === infoHash &&
+      state.streaming.fileIndex === index
+    const isLastPlayed = !!state.lastPlayed &&
+      state.lastPlayed.infoHash === infoHash &&
+      state.lastPlayed.fileIndex === index
+
+    // Where the user got to in this video last time
+    const hasPosition = PlaybackPosition.hasProgress(file) && !PlaybackPosition.isFinished(file)
+    const watched = PlaybackPosition.isWatched(file)
+
     let positionElem
-    if (file.currentTime) {
+    if (hasPosition) {
       // Radial progress bar. 0% = start from 0:00, 270% = 3/4 of the way thru
-      positionElem = this.renderRadialProgressBar(file.currentTime / file.duration)
+      positionElem = this.renderRadialProgressBar(PlaybackPosition.getFraction(file))
     }
 
-    // Finally, render the file as a table row
     const isPlayable = TorrentPlayer.isPlayable(file)
-    const infoHash = torrentSummary.infoHash
+    const isImage = TorrentPlayer.isImage(file)
+
     let icon
     let handleClick
     if (isPlayable) {
-      icon = 'play_arrow' /* playable? add option to play */
+      // Playable? Clicking it downloads just this file and shows it
+      icon = isImage ? 'image' : 'play_arrow'
       handleClick = dispatcher('playFile', infoHash, index)
     } else {
       icon = 'description' /* file icon, opens in OS default app */
@@ -345,32 +432,99 @@ module.exports = class TorrentList extends React.Component {
         ? dispatcher('openPath', infoHash, index)
         : (e) => e.stopPropagation() // noop if file is not ready
     }
-    // TODO: add a css 'disabled' class to indicate that a file cannot be opened/streamed
-    let rowClass = ''
-    if (!isSelected) rowClass = 'disabled' // File deselected, not being torrented
-    if (!isDone && !isPlayable) rowClass = 'disabled' // Can't open yet, can't stream
+
+    // A file we can't show and don't have can't be opened at all
+    const rowClass = (!isPlayable && !isDone) ? 'disabled' : ''
+
+    const classes = ['file-row']
+    if (isStreaming) classes.push('streaming')
+    if (isLastPlayed) classes.push('last-played')
+    if (file.played) classes.push('played')
+    if (hasPosition) classes.push('in-progress')
+
     return (
-      <tr key={index} onClick={handleClick}>
+      <tr
+        key={'file-' + index}
+        className={classes.join(' ')}
+        onClick={handleClick}
+        onContextMenu={dispatcher('openFileContextMenu', infoHash, index)}
+      >
         <td className={'col-icon ' + rowClass}>
           {positionElem}
           <i className='icon'>{icon}</i>
         </td>
-        <td className={'col-name ' + rowClass}>
-          {file.name}
+        <td className={'col-name ' + rowClass} style={{ paddingLeft: indentFor(depth) }}>
+          <div className='file-name ellipsis'>{file.name}</div>
+          {hasPosition ? this.renderWatchProgress(file) : null}
         </td>
         <td className={'col-progress ' + rowClass}>
-          {isSelected ? progress : ''}
+          {isStreaming ? progress : ''}
         </td>
         <td className={'col-size ' + rowClass}>
           {prettyBytes(file.length)}
         </td>
-        <td
-          className='col-select'
-          onClick={dispatcher('toggleTorrentFile', infoHash, index)}
-        >
-          <i className='icon deselect-file'>{isSelected ? 'close' : 'add'}</i>
+        <td className='col-select'>
+          {watched
+            ? (<i className='icon played-check' title='You have watched this'>check</i>)
+            : null}
         </td>
       </tr>
+    )
+  }
+
+  // "12:34 / 45:00" with a thin bar, under a video the user started but has
+  // not finished
+  renderWatchProgress (file) {
+    const fraction = PlaybackPosition.getFraction(file)
+    return (
+      <div key='watch-progress' className='watch-progress'>
+        <div className='watch-bar'>
+          <div className='watch-bar-fill' style={{ width: (fraction * 100) + '%' }} />
+        </div>
+        <span className='watch-time'>
+          {formatPosition(file.currentTime)} / {formatPosition(file.duration)}
+        </span>
+      </div>
+    )
+  }
+
+  /**
+   * "Continue watching": the videos stopped partway through, most recent first,
+   * so they can be picked straight back up.
+   */
+  renderContinueWatching () {
+    const state = this.props.state
+    const entries = PlaybackPosition.getContinueWatching(state)
+    if (entries.length === 0) return null
+
+    const items = entries.map(({ torrentSummary, file, index }) => {
+      const fraction = PlaybackPosition.getFraction(file)
+      return (
+        <div
+          key={torrentSummary.infoHash + ':' + index}
+          className='continue-item'
+          title={torrentSummary.name + ' — ' + file.name}
+          onClick={dispatcher('playFile', torrentSummary.infoHash, index)}
+          onContextMenu={dispatcher('openFileContextMenu', torrentSummary.infoHash, index)}
+          role='button'
+        >
+          <div className='continue-name ellipsis'>{file.name}</div>
+          <div className='continue-torrent ellipsis'>{torrentSummary.name}</div>
+          <div className='watch-bar'>
+            <div className='watch-bar-fill' style={{ width: (fraction * 100) + '%' }} />
+          </div>
+          <div className='continue-time'>
+            {formatPosition(file.currentTime)} / {formatPosition(file.duration)}
+          </div>
+        </div>
+      )
+    })
+
+    return (
+      <div key='continue-watching' className='continue-watching'>
+        <div className='continue-heading'>Continue watching</div>
+        <div className='continue-row'>{items}</div>
+      </div>
     )
   }
 
@@ -394,6 +548,11 @@ module.exports = class TorrentList extends React.Component {
       </div>
     )
   }
+}
+
+// How far a row at this depth in the folder tree is indented, in pixels
+function indentFor (depth) {
+  return depth * 18
 }
 
 function stopPropagation (e) {

@@ -1,5 +1,21 @@
 module.exports = {
-  calculateEta
+  calculateEta,
+  formatPosition
+}
+
+// Seconds as "12:34", or "1:02:03" once past an hour. Used for saved playback
+// positions, in the file list and in the player.
+function formatPosition (seconds) {
+  if (typeof seconds !== 'number' || !isFinite(seconds) || seconds < 0) return '0:00'
+
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor(seconds / 60) % 60
+  const secs = Math.floor(seconds % 60)
+
+  const mm = hours > 0 && minutes < 10 ? '0' + minutes : String(minutes)
+  const ss = secs < 10 ? '0' + secs : String(secs)
+
+  return hours > 0 ? `${hours}:${mm}:${ss}` : `${mm}:${ss}`
 }
 
 function calculateEta (missing, downloadSpeed) {

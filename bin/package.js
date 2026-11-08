@@ -40,6 +40,8 @@ function build () {
   rimraf.sync(NODE_MODULES_PATH)
   cp.execSync('npm ci', { stdio: 'inherit' })
 
+  ensureElectronBinary()
+
   console.log('Nuking dist/ and build/...')
   rimraf.sync(DIST_PATH)
   rimraf.sync(BUILD_PATH)
@@ -66,6 +68,81 @@ function build () {
   }
 }
 
+/**
+ * Makes sure node_modules/electron actually has its binary.
+ *
+ * Two things can leave it missing after `npm ci`: npm 11 blocks package install
+ * scripts by default, and on newer versions of Node the unzip step inside
+ * Electron's own install script can fail without reporting anything. Either way
+ * `require('electron')` then throws and the build stops before it starts.
+ *
+ * Download the archive the usual way if it isn't already cached, then unpack it
+ * here, where a failure is visible.
+ */
+function ensureElectronBinary () {
+  const electronPath = path.join(NODE_MODULES_PATH, 'electron')
+  const distPath = path.join(electronPath, 'dist')
+  const exeName = process.platform === 'win32' ? 'electron.exe' : 'electron'
+  const exePath = path.join(distPath, exeName)
+
+  if (fs.existsSync(exePath)) return
+
+  console.log('Electron binary is missing, unpacking it...')
+  const version = require(path.join(electronPath, 'package.json')).version
+
+  // Fetch the archive into the shared cache (a no-op if it is already there)
+  try {
+    cp.execSync('node install.js', { cwd: electronPath, stdio: 'inherit' })
+  } catch (err) {
+    console.log('Electron install script failed, continuing with the cache:', err.message)
+  }
+  if (fs.existsSync(exePath)) return
+
+  const zipName = `electron-v${version}-${process.platform}-${process.arch}.zip`
+  const zipPath = findInCache(zipName)
+  if (!zipPath) {
+    throw new Error(`Cannot find ${zipName} in the Electron cache. ` +
+      'Run "npm install electron --force" and try again.')
+  }
+
+  rimraf.sync(distPath)
+  fs.mkdirSync(distPath, { recursive: true })
+  zip.unzipSync(zipPath, distPath)
+
+  // Electron's own install script moves the type definitions up a level and
+  // writes this file; the module reads it to find the executable
+  const typeDefs = path.join(distPath, 'electron.d.ts')
+  if (fs.existsSync(typeDefs)) {
+    fs.renameSync(typeDefs, path.join(electronPath, 'electron.d.ts'))
+  }
+  fs.writeFileSync(path.join(electronPath, 'path.txt'), exeName)
+
+  if (!fs.existsSync(exePath)) {
+    throw new Error('Unpacked the Electron archive but ' + exePath + ' is still missing')
+  }
+  console.log('Electron binary unpacked.')
+}
+
+// Looks for a file by name inside the Electron download cache
+function findInCache (name) {
+  const roots = [
+    process.env.electron_config_cache,
+    process.env.ELECTRON_CACHE,
+    process.platform === 'win32'
+      ? path.join(os.homedir(), 'AppData', 'Local', 'electron', 'Cache')
+      : path.join(os.homedir(), '.cache', 'electron')
+  ].filter(Boolean)
+
+  for (const root of roots) {
+    if (!fs.existsSync(root)) continue
+    for (const entry of fs.readdirSync(root)) {
+      const candidate = path.join(root, entry, name)
+      if (fs.existsSync(candidate)) return candidate
+    }
+  }
+  return null
+}
+
 const all = {
   // The human-readable copyright line for the app. Maps to the `LegalCopyright` metadata
   // property on Windows, and `NSHumanReadableCopyright` on Mac.
@@ -81,7 +158,7 @@ const all = {
   asar: {
     // A glob expression, that unpacks the files with matching names to the
     // "app.asar.unpacked" directory.
-    unpack: 'WebTorrent*'
+    unpack: 'StreamTorrent*'
   },
 
   // The build version of the application. Maps to the FileVersion metadata property on
@@ -92,9 +169,16 @@ const all = {
   // The application source directory.
   dir: config.ROOT_PATH,
 
+  // Files and folders copied into the package's "resources" folder, outside
+  // the asar archive. The mpv video engine has to stay a real file on disk so
+  // that it can be spawned; see config.getMpvPath().
+  extraResource: [
+    path.join(config.ROOT_PATH, 'vendor', 'mpv')
+  ],
+
   // Pattern which specifies which files to ignore when copying files to create the
   // package(s).
-  ignore: /^\/src|^\/dist|\/(appveyor.yml|\.appveyor.yml|\.github|appdmg|AUTHORS|CONTRIBUTORS|bench|benchmark|benchmark\.js|bin|bower\.json|component\.json|coverage|doc|docs|docs\.mli|dragdrop\.min\.js|example|examples|example\.html|example\.js|externs|ipaddr\.min\.js|Makefile|min|minimist|perf|rusha|simplepeer\.min\.js|simplewebsocket\.min\.js|static\/screenshot\.png|test|tests|test\.js|tests\.js|webtorrent\.min\.js|\.[^/]*|.*\.md|.*\.markdown)$/,
+  ignore: /^\/src|^\/dist|^\/Temp|^\/vendor|\/(appveyor.yml|\.appveyor.yml|\.github|appdmg|AUTHORS|CONTRIBUTORS|bench|benchmark|benchmark\.js|bin|bower\.json|component\.json|coverage|doc|docs|docs\.mli|dragdrop\.min\.js|example|examples|example\.html|example\.js|externs|ipaddr\.min\.js|Makefile|min|minimist|perf|rusha|simplepeer\.min\.js|simplewebsocket\.min\.js|static\/screenshot\.png|test|tests|test\.js|tests\.js|webtorrent\.min\.js|\.[^/]*|.*\.md|.*\.markdown)$/,
 
   // The application name.
   name: config.APP_NAME,
@@ -121,14 +205,16 @@ const darwin = {
   arch: 'x64',
 
   // The bundle identifier to use in the application's plist (Mac only).
-  appBundleId: 'io.webtorrent.webtorrent',
+  // Deliberately different from WebTorrent Desktop's, so the two are separate
+  // applications as far as the operating system is concerned.
+  appBundleId: 'com.streamtorrent.app',
 
   // The application category type, as shown in the Finder via "View" -> "Arrange by
   // Application Category" when viewing the Applications directory (Mac only).
   appCategoryType: 'public.app-category.utilities',
 
   // The bundle identifier to use in the application helper's plist (Mac only).
-  helperBundleId: 'io.webtorrent.webtorrent-helper',
+  helperBundleId: 'com.streamtorrent.app-helper',
 
   // Application icon.
   icon: config.APP_ICON + '.icns'
@@ -430,10 +516,9 @@ function buildWin32 (cb) {
 
       installer.createWindowsInstaller({
         appDirectory: filesPath,
-        authors: config.APP_TEAM,
+        authors: config.APP_PUBLISHER,
         description: config.APP_NAME,
         exe: config.APP_NAME + '.exe',
-        iconUrl: config.GITHUB_URL_RAW + '/static/' + config.APP_NAME + '.ico',
         loadingGif: path.join(config.STATIC_PATH, 'loading.gif'),
         name: config.APP_NAME,
         noMsi: true,
@@ -449,7 +534,7 @@ function buildWin32 (cb) {
          * If you hit a "GitHub API rate limit exceeded" error, set this token!
          */
         // remoteToken: process.env.WEBTORRENT_GITHUB_API_TOKEN,
-        setupExe: config.APP_NAME + 'Setup-v' + config.APP_VERSION + '.exe',
+        setupExe: config.APP_NAME + 'Setup.exe',
         setupIcon: config.APP_ICON + '.ico',
         signWithParams,
         title: config.APP_NAME,
@@ -488,6 +573,13 @@ function buildWin32 (cb) {
 
       const inPath = path.join(DIST_PATH, path.basename(filesPath))
       const outPath = path.join(DIST_PATH, BUILD_NAME + '-win.zip')
+
+      // cross-zip clears the destination with fs.rmdirSync(..., recursive), and
+      // on Node 16 and up that throws ENOENT when the path is not there. Give
+      // it an empty directory to remove so the zip can be written.
+      fs.rmSync(outPath, { force: true, recursive: true, maxRetries: 3 })
+      fs.mkdirSync(outPath, { recursive: true })
+
       zip.zipSync(inPath, outPath)
 
       console.log('Windows: Created portable app.')

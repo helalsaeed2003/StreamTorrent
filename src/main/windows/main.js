@@ -99,12 +99,18 @@ function init (state, options) {
   }, 1000))
 
   win.on('close', e => {
+    // Closing the window quits the app, so that the temp folder is always
+    // cleared. There is no tray icon to hide into.
     if (process.platform !== 'darwin') {
-      const tray = require('../tray')
-      if (!tray.hasTray()) {
-        app.quit()
-        return
-      }
+      if (app.isQuitting) return // shutting down already: let the window go
+
+      // Hold the window open for now. Quitting has to save the torrent list and
+      // have the WebTorrent process close its files first, and neither can
+      // happen once the windows are gone. app.quit() closes it for real once
+      // that is done.
+      e.preventDefault()
+      app.quit()
+      return
     }
     if (!app.isQuitting) {
       e.preventDefault()
@@ -124,7 +130,10 @@ function hide () {
 }
 
 function send (...args) {
-  if (!main.win) return
+  // The window is gone once the app is shutting down, and sending to it then
+  // throws "Object has been destroyed" - which used to abort the cleanup that
+  // runs at quit, since it logs as it goes
+  if (!main.win || main.win.isDestroyed()) return
   main.win.send(...args)
 }
 

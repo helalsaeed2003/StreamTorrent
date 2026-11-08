@@ -1,6 +1,7 @@
 module.exports = {
   getPosterPath,
   getTorrentPath,
+  getTempPath,
   getByKey,
   getTorrentId,
   getFileOrFolder
@@ -24,6 +25,18 @@ function getPosterPath (torrentSummary) {
   // Work around a Chrome bug (reproduced in vanilla Chrome, not just Electron):
   // Backslashes in URLS in CSS cause bizarre string encoding issues
   return posterPath.replace(/\\/g, '/')
+}
+
+// Expects a torrentSummary (or null, for a torrent with no info hash yet) and a
+// key from state.nextStreamKey++, used only for torrents that have no info hash
+// to name a folder after yet.
+// Returns the temp folder this torrent streams into, inside the program's own
+// folder. One stable folder per torrent, so a file watched earlier in this run
+// is still there and plays instantly. The whole temp folder is cleared when the
+// app starts and when it quits.
+function getTempPath (torrentSummary, streamKey, tempRoot) {
+  const infoHash = torrentSummary && torrentSummary.infoHash
+  return path.join(tempRoot || config.TEMP_PATH, infoHash || ('new-' + streamKey))
 }
 
 // Expects a torrentSummary

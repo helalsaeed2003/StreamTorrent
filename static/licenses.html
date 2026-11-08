@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Open source licences</title>
+    <style>
+      body {
+        background-color: #ECECEC;
+        font-family: BlinkMacSystemFont, 'Helvetica Neue', Helvetica, sans-serif;
+        font-size: 13px;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        -webkit-user-select: none;
+      }
+      header {
+        padding: 12px 16px 8px;
+      }
+      header p {
+        margin: 0 0 8px;
+        color: #444;
+        line-height: 1.5;
+      }
+      a {
+        color: #3f51b5;
+        cursor: pointer;
+      }
+      nav {
+        padding: 0 16px 8px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      nav button {
+        font: inherit;
+        padding: 3px 8px;
+        border: 1px solid #c4c4c4;
+        border-radius: 3px;
+        background: #fff;
+        cursor: pointer;
+      }
+      nav button.active {
+        background: #3f51b5;
+        border-color: #3f51b5;
+        color: #fff;
+      }
+      pre {
+        flex: 1;
+        overflow: auto;
+        margin: 0;
+        padding: 12px 16px;
+        background: #fff;
+        border-top: 1px solid #d8d8d8;
+        font-size: 11px;
+        line-height: 1.45;
+        white-space: pre-wrap;
+        -webkit-user-select: text;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <p id="intro"></p>
+      <p id="source"></p>
+    </header>
+    <nav id="nav"></nav>
+    <pre id="text"></pre>
+    <script>
+      const fs = require('fs')
+      const path = require('path')
+      const { shell } = require('electron')
+      const config = require('../build/config')
+
+      const TITLES = {
+        'mpv-Copyright.txt': 'mpv — copyright',
+        'mpv-LICENSE.GPL.txt': 'mpv — GPLv2',
+        'mpv-LICENSE.LGPL.txt': 'mpv — LGPLv2.1',
+        'ffmpeg-LICENSE.md.txt': 'FFmpeg — licence notes',
+        'ffmpeg-COPYING.GPLv2.txt': 'FFmpeg — GPLv2',
+        'ffmpeg-COPYING.LGPLv2.1.txt': 'FFmpeg — LGPLv2.1'
+      }
+
+      document.getElementById('intro').textContent =
+        config.APP_NAME + ' plays video with the mpv engine (' + config.MPV_VERSION +
+        '), which uses FFmpeg (' + config.MPV_FFMPEG_VERSION + '). Both are free ' +
+        'software, shipped unmodified, and their full licence texts are below.'
+
+      const sourceEl = document.getElementById('source')
+      sourceEl.appendChild(document.createTextNode('Source code: '))
+      ;[['mpv', config.MPV_SOURCE_URL], ['FFmpeg', config.FFMPEG_SOURCE_URL]]
+        .forEach(([name, url], i) => {
+          if (i > 0) sourceEl.appendChild(document.createTextNode(' · '))
+          const a = document.createElement('a')
+          a.textContent = name + ' (' + url + ')'
+          a.onclick = () => shell.openExternal(url)
+          sourceEl.appendChild(a)
+        })
+
+      const nav = document.getElementById('nav')
+      const textEl = document.getElementById('text')
+      const files = fs.readdirSync(config.LICENSES_PATH).sort((a, b) => {
+        const order = Object.keys(TITLES)
+        return order.indexOf(a) - order.indexOf(b)
+      })
+
+      let buttons = []
+      function show (file, button) {
+        buttons.forEach(b => b.classList.remove('active'))
+        button.classList.add('active')
+        textEl.textContent = fs.readFileSync(path.join(config.LICENSES_PATH, file), 'utf8')
+        textEl.scrollTop = 0
+      }
+
+      files.forEach((file, i) => {
+        const button = document.createElement('button')
+        button.textContent = TITLES[file] || file
+        button.onclick = () => show(file, button)
+        nav.appendChild(button)
+        buttons.push(button)
+        if (i === 0) show(file, button)
+      })
+    </script>
+  </body>
+</html>

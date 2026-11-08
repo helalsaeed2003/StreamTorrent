@@ -8,7 +8,7 @@ const TorrentSummary = require('../lib/torrent-summary')
 const Playlist = require('../lib/playlist')
 const { dispatch, dispatcher } = require('../lib/dispatcher')
 const config = require('../../config')
-const { calculateEta } = require('../lib/time')
+const { calculateEta, formatPosition } = require('../lib/time')
 
 // Shows a streaming video player. Standard features + Chromecast + Airplay
 module.exports = class Player extends React.Component {
@@ -16,15 +16,37 @@ module.exports = class Player extends React.Component {
     // Show the video as large as will fit in the window, play immediately
     // If the video is on Chromecast or Airplay, show a title screen instead
     const state = this.props.state
+    const isImage = state.playing.type === 'image'
     const showVideo = state.playing.location === 'local'
     const showControls = state.playing.location !== 'external'
+
+    // Images get their own viewer: no timeline, no volume, just the picture and
+    // the previous/next buttons
+    if (isImage) {
+      return (
+        <div
+          className='player image-player'
+          onMouseMove={dispatcher('mediaMouseMoved')}
+        >
+          {renderImageViewer(state)}
+          {renderImageControls(state)}
+        </div>
+      )
+    }
+
+    // Video goes through mpv, which paints into its own window over the page.
+    // Audio keeps the built-in player, so its artwork and tags still show.
+    const isVideo = state.playing.type === 'video'
+
     return (
       <div
-        className='player'
+        className={'player' + (isVideo ? ' mpv-player' : '')}
         onWheel={handleVolumeWheel}
         onMouseMove={dispatcher('mediaMouseMoved')}
       >
-        {showVideo ? renderMedia(state) : renderCastScreen(state)}
+        {showVideo
+          ? (isVideo ? renderMpvVideo(state) : renderMedia(state))
+          : renderCastScreen(state)}
         {showControls ? renderPlayerControls(state) : null}
       </div>
     )
@@ -44,6 +66,54 @@ module.exports = class Player extends React.Component {
 // Handles volume change by wheel
 function handleVolumeWheel (e) {
   dispatch('changeVolume', (-e.deltaY | e.deltaX) / 500)
+}
+
+/**
+ * Video is drawn by the embedded mpv engine, in a window of its own placed over
+ * this area, so there is no element to render here - only what goes on top of
+ * it while the video is getting going.
+ */
+function renderMpvVideo (state) {
+  const elems = []
+
+  if (!state.playing.mpvLoaded) elems.push(renderVideoLoading(state))
+  const resumeNote = renderResumeNote(state)
+  if (resumeNote) elems.push(resumeNote)
+
+  return (
+    <div
+      key='letterbox'
+      className='letterbox mpv-video'
+      onMouseMove={dispatcher('mediaMouseMoved')}
+      onClick={dispatcher('playPause')}
+    >
+      {elems}
+    </div>
+  )
+}
+
+// Spinner and download progress, shown until the first frame is up
+function renderVideoLoading (state) {
+  const torrentSummary = state.getPlayingTorrentSummary()
+  const prog = (torrentSummary && torrentSummary.progress) || {}
+
+  let percent = 0
+  if (prog.files) {
+    const fileProg = prog.files[state.playing.fileIndex]
+    if (fileProg && fileProg.numPieces > 0) {
+      percent = Math.floor(100 * fileProg.numPiecesPresent / fileProg.numPieces)
+    }
+  }
+
+  return (
+    <div key='video-loading' className='media-stalled'>
+      <div key='loading-spinner' className='loading-spinner' />
+      <div key='loading-progress' className='loading-status ellipsis'>
+        <span><span className='progress'>{percent}%</span> downloaded</span>
+        <span> ↓ {prettyBytes(prog.downloadSpeed || 0)}/s</span>
+      </div>
+    </div>
+  )
 }
 
 function renderMedia (state) {
@@ -79,13 +149,26 @@ function renderMedia (state) {
     if (state.playing.isPaused && !mediaElement.paused) {
       mediaElement.pause()
     } else if (!state.playing.isPaused && mediaElement.paused) {
-      mediaElement.play()
+      // A format Chromium cannot decode rejects play() with NotSupportedError
+      // and never fires an 'error' event on the element, so catch it here too -
+      // this is what hands those files to the external player (VLC).
+      const played = mediaElement.play()
+      if (played && typeof played.catch === 'function') {
+        played.catch(err => {
+          // AbortError just means we switched files or left the page
+          if (err && err.name === 'NotSupportedError') dispatch('mediaError', err.message)
+        })
+      }
     }
     // When the user clicks or drags on the progress bar, jump to that position
     if (state.playing.jumpToTime != null) {
       mediaElement.currentTime = state.playing.jumpToTime
       state.playing.jumpToTime = null
     }
+    // Keep voices sounding normal rather than chipmunky when speeding up
+    if (mediaElement.preservesPitch === false) mediaElement.preservesPitch = true
+    if (mediaElement.webkitPreservesPitch === false) mediaElement.webkitPreservesPitch = true
+
     if (state.playing.playbackRate !== mediaElement.playbackRate) {
       mediaElement.playbackRate = state.playing.playbackRate
     }
@@ -148,12 +231,15 @@ function renderMedia (state) {
     })
   }
 
-  // Create the <audio> or <video> tag
+  // Create the <audio> or <video> tag.
+  // Note: there is deliberately no onDoubleClick full screen toggle here. The
+  // second click of a double click landed on the video far too easily and threw
+  // playback into full screen by accident. The full screen button and the F key
+  // still work.
   const MediaTagName = state.playing.type
   const mediaTag = (
     <MediaTagName
       src={Playlist.getCurrentLocalURL(state)}
-      onDoubleClick={dispatcher('toggleFullScreen')}
       onClick={dispatcher('playPause')}
       onLoadedMetadata={onLoadedMetadata}
       onEnded={onEnded}
@@ -175,6 +261,7 @@ function renderMedia (state) {
     >
       {mediaTag}
       {renderOverlay(state)}
+      {renderResumeNote(state)}
     </div>
   )
 
@@ -225,14 +312,173 @@ function renderMedia (state) {
   }
 
   function onEnded () {
+    // Watched to the end: tick it off and forget the resume point
+    dispatch('mediaEnded')
+
     if (Playlist.hasNext(state)) {
       dispatch('nextTrack')
     } else {
-      // When the last video completes, pause the video instead of looping
-      state.playing.isPaused = true
-      if (state.window.isFullScreen) dispatch('toggleFullScreen')
+      // Nothing left to play. Go back to the list, which stops the download and
+      // deletes the file we just watched, and puts the list back where it was.
+      dispatch('backToList')
     }
   }
+}
+
+// Shows a single image, with arrows to step through the other images in the
+// same folder. The picture is streamed over HTTP like any other file, so the
+// renderer never holds the file on disk open and it can be deleted the moment
+// the viewer closes.
+function renderImageViewer (state) {
+  const url = Playlist.getCurrentLocalURL(state)
+  const isLoaded = state.playing.imageLoaded
+
+  const elems = []
+
+  // Keying the <img> on the file index gives each picture a fresh element, so
+  // onLoad fires again every time the user steps to another one
+  if (url) {
+    elems.push(
+      <img
+        key={'image-' + state.playing.fileIndex}
+        className={'image-view' + (isLoaded ? '' : ' loading')}
+        src={url}
+        alt={state.playing.fileName}
+        onLoad={dispatcher('imageLoaded')}
+        onError={dispatcher('imageError')}
+      />
+    )
+  }
+
+  if (!isLoaded) elems.push(renderImageLoading(state))
+
+  if (Playlist.hasPrevious(state)) {
+    elems.push(
+      <i
+        key='image-prev'
+        className='icon image-nav prev'
+        onClick={dispatcher('previousTrack')}
+        role='button'
+        aria-label='Previous image'
+      >
+        chevron_left
+      </i>
+    )
+  }
+
+  if (Playlist.hasNext(state)) {
+    elems.push(
+      <i
+        key='image-next'
+        className='icon image-nav next'
+        onClick={dispatcher('nextTrack')}
+        role='button'
+        aria-label='Next image'
+      >
+        chevron_right
+      </i>
+    )
+  }
+
+  return (
+    <div
+      key='letterbox'
+      className='letterbox image-viewer'
+      onMouseMove={dispatcher('mediaMouseMoved')}
+    >
+      {elems}
+    </div>
+  )
+}
+
+// Spinner and download progress, shown until the picture itself arrives
+function renderImageLoading (state) {
+  const torrentSummary = state.getPlayingTorrentSummary()
+  const prog = (torrentSummary && torrentSummary.progress) || {}
+
+  let percent = 0
+  if (prog.files) {
+    const fileProg = prog.files[state.playing.fileIndex]
+    if (fileProg && fileProg.numPieces > 0) {
+      percent = Math.floor(100 * fileProg.numPiecesPresent / fileProg.numPieces)
+    }
+  }
+
+  return (
+    <div key='image-loading' className='media-stalled'>
+      <div key='loading-spinner' className='loading-spinner' />
+      <div key='loading-progress' className='loading-status ellipsis'>
+        <span><span className='progress'>{percent}%</span> downloaded</span>
+        <span> ↓ {prettyBytes(prog.downloadSpeed || 0)}/s</span>
+      </div>
+    </div>
+  )
+}
+
+// Controls for the image viewer: previous, next, full screen and the file name
+function renderImageControls (state) {
+  const prevClass = Playlist.hasPrevious(state) ? '' : 'disabled'
+  const nextClass = Playlist.hasNext(state) ? '' : 'disabled'
+
+  return (
+    <div
+      key='controls' className='controls image-controls'
+      onMouseEnter={dispatcher('mediaControlsMouseEnter')}
+      onMouseLeave={dispatcher('mediaControlsMouseLeave')}
+    >
+      <i
+        key='skip-previous'
+        className={'icon skip-previous float-left ' + prevClass}
+        onClick={dispatcher('previousTrack')}
+        role='button'
+        aria-label='Previous image'
+      >
+        skip_previous
+      </i>
+      <i
+        key='skip-next'
+        className={'icon skip-next float-left ' + nextClass}
+        onClick={dispatcher('nextTrack')}
+        role='button'
+        aria-label='Next image'
+      >
+        skip_next
+      </i>
+      <i
+        key='fullscreen'
+        className='icon fullscreen float-right'
+        onClick={dispatcher('toggleFullScreen')}
+        role='button'
+        aria-label={state.window.isFullScreen ? 'Exit full screen' : 'Enter full screen'}
+      >
+        {state.window.isFullScreen ? 'fullscreen_exit' : 'fullscreen'}
+      </i>
+      <span key='name' className='time float-left ellipsis'>
+        {state.playing.fileName}
+      </span>
+    </div>
+  )
+}
+
+// "Resumed from 12:34 · Start over", shown briefly after picking up a video
+// partway through
+function renderResumeNote (state) {
+  const resumedFrom = state.playing.resumedFrom
+  if (resumedFrom == null) return
+
+  return (
+    <div key='resume-note' className='resume-note'>
+      <span className='resume-text'>
+        Resumed from {formatPosition(resumedFrom)}
+      </span>
+      <span className='resume-action' onClick={dispatcher('startOver')} role='button'>
+        Start over
+      </span>
+      <i className='icon resume-dismiss' onClick={dispatcher('dismissResumeNote')} role='button'>
+        close
+      </i>
+    </div>
+  )
 }
 
 function renderOverlay (state) {
@@ -547,31 +793,84 @@ function renderCastOptions (state) {
   )
 }
 
+/**
+ * The subtitle menu: tracks inside the video, subtitle files sitting in the
+ * torrent, one from the user's own machine, and the timing and size controls.
+ */
 function renderSubtitleOptions (state) {
   const subtitles = state.playing.subtitles
-  if (!subtitles.tracks.length || !subtitles.showMenu) return
+  if (!subtitles.showMenu) return
 
-  const items = subtitles.tracks.map((track, ix) => {
-    const isSelected = state.playing.subtitles.selectedIndex === ix
-    return (
-      <li key={ix} onClick={dispatcher('selectSubtitle', ix)}>
-        <i className='icon'>{'radio_button_' + (isSelected ? 'checked' : 'unchecked')}</i>
-        {track.label}
-      </li>
-    )
-  })
+  const items = []
 
-  const noneSelected = state.playing.subtitles.selectedIndex === -1
-  const noneClass = 'radio_button_' + (noneSelected ? 'checked' : 'unchecked')
+  // Subtitles built into the video, plus any file already loaded
+  if (subtitles.tracks.length > 0) {
+    items.push(<li key='h-tracks' className='options-heading'>In this video</li>)
+    subtitles.tracks.forEach((track, ix) => {
+      const isSelected = subtitles.selectedIndex === ix
+      items.push(
+        <li key={'track-' + ix} onClick={dispatcher('selectSubtitle', ix)}>
+          <i className='icon'>{'radio_button_' + (isSelected ? 'checked' : 'unchecked')}</i>
+          {track.label}
+        </li>
+      )
+    })
+  }
+
+  // Subtitle files in the torrent. Choosing one downloads just that file.
+  const files = state.playing.subtitleFiles || []
+  if (files.length > 0) {
+    items.push(<li key='h-files' className='options-heading'>In this torrent</li>)
+    files.forEach((file) => {
+      const pending = state.playing.pendingSubtitle === file.index
+      items.push(
+        <li key={'file-' + file.index} onClick={dispatcher('selectTorrentSubtitle', file.index)}>
+          <i className='icon'>{pending ? 'hourglass_empty' : 'subtitles'}</i>
+          <span className='ellipsis'>{file.name}</span>
+        </li>
+      )
+    })
+  }
+
+  const noneSelected = subtitles.selectedIndex === -1
+  items.push(
+    <li key='none' onClick={dispatcher('selectSubtitle', -1)}>
+      <i className='icon'>{'radio_button_' + (noneSelected ? 'checked' : 'unchecked')}</i>
+      Off
+    </li>,
+    <li key='open' onClick={dispatcher('openSubtitles')}>
+      <i className='icon'>folder_open</i>
+      Load from my computer…
+    </li>,
+    <li key='h-adjust' className='options-heading'>Timing and size</li>,
+    <li key='delay' className='options-adjust'>
+      <span className='adjust-label'>
+        Delay {formatDelay(state.playing.subtitleDelay || 0)}
+      </span>
+      <i className='icon' title='Show earlier' onClick={dispatcher('changeSubtitleDelay', -1)}>remove</i>
+      <i className='icon' title='Show later' onClick={dispatcher('changeSubtitleDelay', 1)}>add</i>
+      <i className='icon' title='Reset timing' onClick={dispatcher('resetSubtitleDelay')}>restore</i>
+    </li>,
+    <li key='scale' className='options-adjust'>
+      <span className='adjust-label'>
+        Size {Math.round((state.playing.subtitleScale || 1) * 100)}%
+      </span>
+      <i className='icon' title='Smaller' onClick={dispatcher('changeSubtitleScale', -1)}>remove</i>
+      <i className='icon' title='Bigger' onClick={dispatcher('changeSubtitleScale', 1)}>add</i>
+    </li>
+  )
+
   return (
-    <ul key='subtitle-options' className='options-list'>
+    <ul key='subtitle-options' className='options-list subtitle-options'>
       {items}
-      <li onClick={dispatcher('selectSubtitle', -1)}>
-        <i className='icon'>{noneClass}</i>
-        None
-      </li>
     </ul>
   )
+}
+
+// "+0.4s" / "-1.2s" / "0s"
+function formatDelay (delay) {
+  if (!delay) return '0s'
+  return (delay > 0 ? '+' : '') + delay.toFixed(1) + 's'
 }
 
 function renderAudioTrackOptions (state) {
@@ -598,11 +897,13 @@ function renderAudioTrackOptions (state) {
 function renderPlayerControls (state) {
   const positionPercent = 100 * state.playing.currentTime / state.playing.duration
   const playbackCursorStyle = { left: 'calc(' + positionPercent + '% - 3px)' }
-  const captionsClass = state.playing.subtitles.tracks.length === 0
-    ? 'disabled'
-    : state.playing.subtitles.selectedIndex >= 0
-      ? 'active'
-      : ''
+  // Subtitles are available if the video has tracks of its own or the torrent
+  // holds subtitle files; either way there is always the "load from disk" entry
+  const hasSubtitles = state.playing.subtitles.tracks.length > 0 ||
+    (state.playing.subtitleFiles || []).length > 0
+  const captionsClass = state.playing.subtitles.selectedIndex >= 0
+    ? 'active'
+    : hasSubtitles ? '' : 'dim'
   const multiAudioClass = state.playing.audioTracks.tracks.length > 1
     ? 'active'
     : 'disabled'
@@ -669,7 +970,19 @@ function renderPlayerControls (state) {
       aria-label={state.window.isFullScreen ? 'Exit full screen' : 'Enter full screen'}
     >
       {state.window.isFullScreen ? 'fullscreen_exit' : 'fullscreen'}
-    </i>
+    </i>,
+
+    <div
+      key='playback-rate'
+      className={'playback-rate float-right' +
+        (state.playing.playbackRate !== 1 ? ' active' : '')}
+      onClick={dispatcher('togglePlaybackRateMenu')}
+      role='button'
+      title='Playback speed'
+      aria-label={'Playback speed: ' + formatPlaybackRate(state.playing.playbackRate)}
+    >
+      {formatPlaybackRate(state.playing.playbackRate)}
+    </div>
   ]
 
   if (state.playing.type === 'video') {
@@ -786,15 +1099,6 @@ function renderPlayerControls (state) {
     </span>
   ))
 
-  // Render playback rate
-  if (state.playing.playbackRate !== 1) {
-    elements.push((
-      <span key='rate' className='rate float-left'>
-        {state.playing.playbackRate}x
-      </span>
-    ))
-  }
-
   const emptyImage = new window.Image(0, 0)
   emptyImage.src = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs%3D'
   function handleDragStart (e) {
@@ -844,13 +1148,10 @@ function renderPlayerControls (state) {
     dispatch('setVolume', e.target.value)
   }
 
-  function handleSubtitles (e) {
-    if (!state.playing.subtitles.tracks.length || e.ctrlKey || e.metaKey) {
-      // if no subtitles available select it
-      dispatch('openSubtitles')
-    } else {
-      dispatch('toggleSubtitlesMenu')
-    }
+  function handleSubtitles () {
+    // The menu covers everything: tracks in the video, subtitle files in the
+    // torrent, one from disk, and the timing and size controls
+    dispatch('toggleSubtitlesMenu')
   }
 
   function handleAudioTracks () {
@@ -867,7 +1168,33 @@ function renderPlayerControls (state) {
       {renderCastOptions(state)}
       {renderSubtitleOptions(state)}
       {renderAudioTrackOptions(state)}
+      {renderPlaybackRateOptions(state)}
     </div>
+  )
+}
+
+// "1x", "1.25x", "0.5x" - what the speed button shows
+function formatPlaybackRate (rate) {
+  return rate + 'x'
+}
+
+function renderPlaybackRateOptions (state) {
+  if (!state.playing.showPlaybackRateMenu) return
+
+  const items = config.PLAYBACK_RATES.map((rate) => {
+    const isSelected = state.playing.playbackRate === rate
+    return (
+      <li key={rate} onClick={dispatcher('setPlaybackRate', rate)}>
+        <i className='icon'>{'radio_button_' + (isSelected ? 'checked' : 'unchecked')}</i>
+        {formatPlaybackRate(rate)}
+      </li>
+    )
+  })
+
+  return (
+    <ul key='playback-rate-options' className='options-list playback-rate-options'>
+      {items}
+    </ul>
   )
 }
 
@@ -879,19 +1206,13 @@ function renderPreview (state) {
   const fraction = previewXCoord / windowWidth
   const time = fraction * state.playing.duration /* seconds */
 
-  const height = 70
-  let width = 0
+  // Only the time is shown, not a thumbnail. A thumbnail needs a second
+  // <video> tag reading the same stream, which downloads extra pieces of the
+  // torrent and cannot decode the formats the mpv engine handles for us.
+  const width = 86
 
-  const previewEl = document.querySelector('video#preview')
-  if (previewEl !== null && previewXCoord !== null) {
-    previewEl.currentTime = time
-
-    // Auto adjust width to maintain video aspect ratio
-    width = Math.floor((previewEl.videoWidth / previewEl.videoHeight) * height)
-  }
-
-  // Center preview window on mouse cursor,
-  // while avoiding falling off the left or right edges
+  // Center the label on the mouse cursor, while avoiding falling off the left
+  // or right edges
   const xPos = Math.min(Math.max(previewXCoord - (width / 2), 5), windowWidth - width - 5)
 
   return (
@@ -900,22 +1221,16 @@ function renderPreview (state) {
         position: 'absolute',
         bottom: 50,
         left: xPos,
+        width,
         display: previewXCoord == null && 'none' // Hide preview when XCoord unset
       }}
     >
-      <div style={{ width, height, backgroundColor: 'black' }}>
-        <video
-          src={Playlist.getCurrentLocalURL(state)}
-          id='preview'
-          style={{ border: '1px solid lightgrey', borderRadius: 2 }}
-        />
-      </div>
       <p
         style={{
           textAlign: 'center', margin: 5, textShadow: '0 0 2px rgba(0,0,0,.5)', color: '#eee'
         }}
       >
-        {formatTime(time, state.playing.duration)}
+        {Number.isFinite(time) ? formatTime(time, state.playing.duration) : ''}
       </p>
     </div>
   )

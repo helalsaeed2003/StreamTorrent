@@ -1,8 +1,8 @@
-const appConfig = require('application-config')('WebTorrent')
 const path = require('path')
 const { EventEmitter } = require('events')
 
 const config = require('../../config')
+const appConfig = require('application-config')(config.APP_NAME)
 const defaultAnnounceList = require('create-torrent').announceList.map((arr) => arr[0])
 
 const SAVE_DEBOUNCE_INTERVAL = 1000
@@ -56,6 +56,17 @@ function getDefaultState () {
     modal: null, /* modal popover */
     errors: [], /* user-facing errors */
     nextTorrentKey: 1, /* identify torrents for IPC between the main and webtorrent windows */
+    nextStreamKey: 1, /* makes each preview use a scratch folder of its own */
+
+    /*
+     * Torrent list view state. Kept so that closing the player brings the list
+     * back exactly as the user left it: same scroll position, same open folders.
+     */
+    listScrollTop: 0, /* scroll position of the torrent list */
+    lastPlayed: null, /* {infoHash, fileIndex} of the file played most recently */
+    streaming: null, /* {infoHash, fileIndex} of the file being downloaded now */
+    tempPath: null, /* the temp folder actually in use, once checked */
+    tempUsage: null, /* {bytes, path} for the Preferences screen */
 
     /*
      * Saved state is read from and written to a file every time the app runs.
@@ -79,7 +90,6 @@ function getDefaultState () {
      */
     getPlayingTorrentSummary,
     getPlayingFileSummary,
-    getExternalPlayerName,
     getGlobalTrackers,
     shouldHidePlayerControls
   }
@@ -92,15 +102,19 @@ function getDefaultPlayState () {
     fileIndex: null, /* the zero-based index within the torrent */
     fileName: null, /* name of the file that is playing */
     location: 'local', /* 'local', 'chromecast', 'airplay' */
-    type: null, /* 'audio' or 'video', could be 'other' if ever support eg streaming to VLC */
+    type: null, /* 'audio', 'video' or 'image'; 'other' when streaming to VLC */
     currentTime: 0, /* seconds */
     duration: 1, /* seconds */
     isReady: false,
+    imageLoaded: false, /* image viewer: has the picture itself arrived yet */
+    resumedFrom: null, /* seconds we resumed from, for the "Resumed from" note */
+    subtitleDelay: 0, /* subtitle timing offset, in seconds */
     isPaused: true,
     isStalled: false,
     lastTimeUpdate: 0, /* Unix time in ms */
     mouseStationarySince: 0, /* Unix time in ms */
-    playbackRate: 1,
+    playbackRate: 1, /* overwritten from saved prefs when the player opens */
+    showPlaybackRateMenu: false, /* the speed popover, above the video */
     volume: 1,
     subtitles: {
       tracks: [], /* subtitle tracks, each {label, language, ...} */
@@ -125,16 +139,18 @@ function setupStateSaved () {
     prefs: {
       downloadPath: config.DEFAULT_DOWNLOAD_PATH,
       isFileHandler: false,
-      openExternalPlayer: false,
-      externalPlayerPath: '',
       startup: false,
       soundNotifications: true,
       autoAddTorrents: false,
       torrentsFolderPath: '',
       highestPlaybackPriority: true,
-      globalTrackers: defaultAnnounceList
+      globalTrackers: defaultAnnounceList,
+      playbackRate: 1, /* remembered between videos and app restarts */
+      tempPath: '' /* '' means the default folder, inside the program folder */
     },
     torrents: config.DEFAULT_TORRENTS.map(createTorrentObject),
+    folderExpanded: {}, /* which folders of which torrents are open */
+    staleTempPaths: [], /* temp folders we used before the setting was changed */
     torrentsToResume: [],
     version: config.APP_VERSION /* make sure we can upgrade gracefully later */
   }
@@ -172,7 +188,9 @@ function setupStateSaved () {
       torrentFileName: parsedTorrent.infoHash + '.torrent',
       magnetURI: parseTorrent.toMagnetURI(parsedTorrent),
       files: parsedTorrent.files,
-      selections: parsedTorrent.files.map((x) => true),
+      // Nothing is selected by default: a file is only downloaded once the user
+      // plays it. See PlaybackController.streamOnlyFile()
+      selections: parsedTorrent.files.map(() => false),
       testID: t.testID
     }
   }
@@ -189,13 +207,11 @@ function getPlayingFileSummary () {
   return torrentSummary.files[this.playing.fileIndex]
 }
 
-function getExternalPlayerName () {
-  const playerPath = this.saved.prefs.externalPlayerPath
-  if (!playerPath) return 'VLC'
-  return path.basename(playerPath).split('.')[0]
-}
-
 function shouldHidePlayerControls () {
+  // The image viewer has no timeline to get out of the way of, so its controls
+  // stay put
+  if (this.playing.type === 'image') return false
+
   return this.location.url() === 'player' &&
     this.playing.mouseStationarySince !== 0 &&
     new Date().getTime() - this.playing.mouseStationarySince > 2000 &&
@@ -231,6 +247,15 @@ async function load (cb) {
     if (err) return cb(err)
     const state = getDefaultState()
     state.saved = saved
+
+    // Fill in anything a config written by an older build is missing, so that
+    // saved torrents, open folders and the chosen speed all survive an upgrade
+    if (!saved.folderExpanded) saved.folderExpanded = {}
+    if (!saved.prefs) saved.prefs = {}
+    if (typeof saved.prefs.playbackRate !== 'number') saved.prefs.playbackRate = 1
+    if (typeof saved.prefs.tempPath !== 'string') saved.prefs.tempPath = ''
+    if (!Array.isArray(saved.torrents)) saved.torrents = []
+    if (!Array.isArray(saved.staleTempPaths)) saved.staleTempPaths = []
 
     if (process.type === 'renderer') {
       // Perf optimization: Save require() calls in the main process

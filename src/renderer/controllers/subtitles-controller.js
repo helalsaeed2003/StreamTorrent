@@ -1,134 +1,261 @@
-const remote = require('@electron/remote')
-const fs = require('fs')
 const path = require('path')
-const parallel = require('run-parallel')
+const remote = require('@electron/remote')
+const { ipcRenderer } = require('electron')
 
+const config = require('../../config')
 const { dispatch } = require('../lib/dispatcher')
+const MpvPlayer = require('../lib/mpv-player')
 
+/**
+ * Subtitles, handled by the embedded mpv engine.
+ *
+ * mpv reads .srt, .ass/.ssa, .vtt and .sub directly, keeps ASS styling, and
+ * lists whatever is embedded in the video, so there is no conversion step. This
+ * controller decides what to offer in the menu, what to turn on by itself, and
+ * remembers the choice for next time.
+ */
 module.exports = class SubtitlesController {
   constructor (state) {
     this.state = state
   }
 
-  openSubtitles () {
-    const filenames = remote.dialog.showOpenDialogSync({
-      title: 'Select a subtitles file.',
-      filters: [{ name: 'Subtitles', extensions: ['vtt', 'srt'] }],
-      properties: ['openFile']
-    })
-    if (!Array.isArray(filenames)) return
-    this.addSubtitles(filenames, true)
+  // Is this a subtitle file, by extension?
+  isSubtitle (file) {
+    const name = typeof file === 'string' ? file : file.name
+    return config.SUBTITLE_EXTENSIONS.includes(path.extname(name).toLowerCase())
   }
 
-  selectSubtitle (ix) {
-    this.state.playing.subtitles.selectedIndex = ix
+  /**
+   * Works out which subtitle files in the torrent are worth offering, with the
+   * most likely ones first: same name as the video, then same folder, then the
+   * rest of the torrent.
+   */
+  checkForSubtitles () {
+    const state = this.state
+    if (state.playing.type !== 'video') return
+
+    const torrentSummary = state.getPlayingTorrentSummary()
+    const fileSummary = state.getPlayingFileSummary()
+    if (!torrentSummary || !torrentSummary.files || !fileSummary) return
+
+    const videoFolder = folderOf(fileSummary)
+    const videoBase = baseName(fileSummary.name)
+
+    const candidates = []
+    torrentSummary.files.forEach((file, index) => {
+      if (!this.isSubtitle(file)) return
+
+      const sameFolder = folderOf(file) === videoFolder
+      const subBase = baseName(file.name)
+      // "Show.S01E01.mkv" and "Show.S01E01.en.srt" belong together
+      const matchesName = subBase === videoBase ||
+        subBase.startsWith(videoBase + '.') ||
+        videoBase.startsWith(subBase + '.')
+
+      candidates.push({
+        index,
+        name: file.name,
+        length: file.length,
+        sameFolder,
+        matchesName,
+        score: (matchesName ? 2 : 0) + (sameFolder ? 1 : 0)
+      })
+    })
+
+    candidates.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+
+    // Anything from elsewhere in the torrent is noise once there are good
+    // matches, so only keep those when nothing matches
+    const best = candidates.filter(c => c.score > 0)
+    state.playing.subtitleFiles = (best.length > 0 ? best : candidates).slice(0, 25)
+
+    this.autoSelectSubtitle()
+  }
+
+  /**
+   * Turns on a sensible subtitle without being asked: the one the user chose
+   * for this video before, otherwise their usual language, otherwise a
+   * subtitle file named after the video, otherwise an English track.
+   */
+  autoSelectSubtitle () {
+    const state = this.state
+    const fileSummary = state.getPlayingFileSummary()
+    if (!fileSummary) return
+
+    // The user turned subtitles off and meant it
+    if (state.saved.prefs.subtitlesEnabled === false) return
+
+    const choice = fileSummary.subtitleChoice
+    if (choice) {
+      if (choice.type === 'off') return
+      if (choice.type === 'file' && choice.index != null) {
+        return this.selectTorrentSubtitle(choice.index)
+      }
+      if (choice.type === 'external' && choice.filePath) {
+        return MpvPlayer.addSubtitleFile(choice.filePath, path.basename(choice.filePath))
+      }
+      if (choice.type === 'track' && choice.language) {
+        return this.selectTrackByLanguage(choice.language)
+      }
+    }
+
+    // A subtitle file named after the video is almost always the right one
+    const named = (state.playing.subtitleFiles || []).find(f => f.matchesName)
+    if (named) return this.selectTorrentSubtitle(named.index)
+
+    const language = state.saved.prefs.subtitleLanguage || 'en'
+    this.selectTrackByLanguage(language)
+  }
+
+  // Picks an embedded track by language, if the video has one
+  selectTrackByLanguage (language) {
+    const tracks = this.state.playing.subtitles.tracks || []
+    const wanted = String(language).slice(0, 2).toLowerCase()
+    const match = tracks.find(t => (t.language || '').slice(0, 2).toLowerCase() === wanted)
+    if (!match) return false
+
+    MpvPlayer.setSubtitleTrack(match.id)
+    return true
+  }
+
+  // Picks one of mpv's tracks from the menu
+  selectSubtitle (index) {
+    const state = this.state
+    const tracks = state.playing.subtitles.tracks || []
+
+    if (index === -1 || !tracks[index]) {
+      MpvPlayer.setSubtitleTrack(null)
+      state.playing.subtitles.selectedIndex = -1
+      this.rememberChoice({ type: 'off' })
+      state.saved.prefs.subtitlesEnabled = false
+    } else {
+      const track = tracks[index]
+      MpvPlayer.setSubtitleTrack(track.id)
+      state.playing.subtitles.selectedIndex = index
+      state.saved.prefs.subtitlesEnabled = true
+      if (track.language) state.saved.prefs.subtitleLanguage = track.language
+      this.rememberChoice(track.external && track.filePath
+        ? { type: 'external', filePath: track.filePath }
+        : { type: 'track', language: track.language || '', id: track.id })
+    }
+
+    state.playing.subtitles.showMenu = false
+    dispatch('stateSave')
+  }
+
+  /**
+   * Downloads one subtitle file out of the torrent - just that file, nothing
+   * else - and hands it to mpv once it has arrived.
+   */
+  selectTorrentSubtitle (index) {
+    const state = this.state
+    const torrentSummary = state.getPlayingTorrentSummary()
+    if (!torrentSummary) return
+
+    state.playing.pendingSubtitle = index
+    state.playing.subtitles.showMenu = false
+    state.saved.prefs.subtitlesEnabled = true
+    this.rememberChoice({ type: 'file', index })
+
+    ipcRenderer.send('wt-fetch-file', torrentSummary.infoHash, index)
+    dispatch('stateSave')
+  }
+
+  // A file we asked for has finished downloading
+  subtitleFileReady (infoHash, index, filePath) {
+    const state = this.state
+    if (state.playing.pendingSubtitle !== index) return
+    state.playing.pendingSubtitle = null
+
+    const torrentSummary = state.getPlayingTorrentSummary()
+    const file = torrentSummary && torrentSummary.files[index]
+    MpvPlayer.addSubtitleFile(filePath, file ? file.name : undefined)
+    dispatch('update')
+  }
+
+  // "Load from my computer..."
+  openSubtitles () {
+    const filePaths = remote.dialog.showOpenDialogSync(remote.getCurrentWindow(), {
+      title: 'Select a subtitle file',
+      filters: [{
+        name: 'Subtitles',
+        extensions: config.SUBTITLE_EXTENSIONS.map(e => e.slice(1))
+      }],
+      properties: ['openFile']
+    })
+    if (!Array.isArray(filePaths) || filePaths.length === 0) return
+
+    this.addSubtitles(filePaths, true)
+  }
+
+  // Subtitle files dropped onto the window, or chosen from the dialog
+  addSubtitles (files, autoSelect) {
+    const paths = files
+      .map(file => (typeof file === 'string' ? file : file.path))
+      .filter(filePath => filePath && this.isSubtitle(filePath))
+
+    paths.forEach(filePath => MpvPlayer.addSubtitleFile(filePath, path.basename(filePath)))
+
+    if (paths.length > 0 && autoSelect) {
+      this.state.saved.prefs.subtitlesEnabled = true
+      this.rememberChoice({ type: 'external', filePath: paths[paths.length - 1] })
+      dispatch('stateSave')
+    }
   }
 
   toggleSubtitlesMenu () {
-    const subtitles = this.state.playing.subtitles
-    subtitles.showMenu = !subtitles.showMenu
-  }
-
-  addSubtitles (files, autoSelect) {
-    // Subtitles are only supported when playing video files
-    if (this.state.playing.type !== 'video') return
-    if (files.length === 0) return
-    const subtitles = this.state.playing.subtitles
-
-    // Read the files concurrently, then add all resulting subtitle tracks
-    const tasks = files.map((file) => (cb) => loadSubtitle(file, cb))
-    parallel(tasks, (err, tracks) => {
-      if (err) return dispatch('error', err)
-
-      // No dupes allowed
-      tracks.forEach((track, i) => {
-        let trackIndex = subtitles.tracks.findIndex((t) =>
-          track.filePath === t.filePath)
-
-        // Add the track
-        if (trackIndex === -1) {
-          trackIndex = subtitles.tracks.push(track) - 1
-        }
-
-        // If we're auto-selecting a track, try to find one in the user's language
-        if (autoSelect && (i === 0 || isSystemLanguage(track.language))) {
-          subtitles.selectedIndex = trackIndex
-        }
-      })
-
-      // Finally, make sure no two tracks have the same label
-      relabelSubtitles(subtitles)
-    })
-  }
-
-  checkForSubtitles () {
-    if (this.state.playing.type !== 'video') return
-    const torrentSummary = this.state.getPlayingTorrentSummary()
-    if (!torrentSummary || !torrentSummary.progress) return
-
-    torrentSummary.progress.files.forEach((fp, ix) => {
-      if (fp.numPieces !== fp.numPiecesPresent) return // ignore incomplete files
-      const file = torrentSummary.files[ix]
-      if (!this.isSubtitle(file.name)) return
-      const filePath = path.join(torrentSummary.path, file.path)
-      this.addSubtitles([filePath], false)
-    })
-  }
-
-  isSubtitle (file) {
-    const name = typeof file === 'string' ? file : file.name
-    const ext = path.extname(name).toLowerCase()
-    return ext === '.srt' || ext === '.vtt'
-  }
-}
-
-function loadSubtitle (file, cb) {
-  // Lazy load to keep startup fast
-  const concat = require('simple-concat')
-  const LanguageDetect = require('languagedetect')
-  const srtToVtt = require('srt-to-vtt')
-
-  // Read the .SRT or .VTT file, parse it, add subtitle track
-  const filePath = file.path || file
-
-  const vttStream = fs.createReadStream(filePath).pipe(srtToVtt())
-
-  concat(vttStream, (err, buf) => {
-    if (err) return dispatch('error', 'Can\'t parse subtitles file.')
-
-    // Detect what language the subtitles are in
-    const vttContents = buf.toString().replace(/(.*-->.*)/g, '')
-    let langDetected = (new LanguageDetect()).detect(vttContents, 2)
-    langDetected = langDetected.length ? langDetected[0][0] : 'subtitle'
-    langDetected = langDetected.slice(0, 1).toUpperCase() + langDetected.slice(1)
-
-    const track = {
-      buffer: 'data:text/vtt;base64,' + buf.toString('base64'),
-      language: langDetected,
-      label: langDetected,
-      filePath
+    const playing = this.state.playing
+    playing.subtitles.showMenu = !playing.subtitles.showMenu
+    if (playing.subtitles.showMenu) {
+      playing.audioTracks.showMenu = false
+      playing.showPlaybackRateMenu = false
     }
+    playing.mouseStationarySince = new Date().getTime()
+  }
 
-    cb(null, track)
-  })
+  // Nudge the subtitles earlier or later, in small steps
+  changeSubtitleDelay (direction) {
+    const playing = this.state.playing
+    const delay = (playing.subtitleDelay || 0) + direction * config.SUBTITLE_DELAY_STEP
+    playing.subtitleDelay = Math.round(delay * 100) / 100
+    MpvPlayer.setSubtitleDelay(playing.subtitleDelay)
+
+    const fileSummary = this.state.getPlayingFileSummary()
+    if (fileSummary) fileSummary.subtitleDelay = playing.subtitleDelay
+    dispatch('stateSave')
+  }
+
+  resetSubtitleDelay () {
+    const playing = this.state.playing
+    playing.subtitleDelay = 0
+    MpvPlayer.setSubtitleDelay(0)
+    const fileSummary = this.state.getPlayingFileSummary()
+    if (fileSummary) delete fileSummary.subtitleDelay
+    dispatch('stateSave')
+  }
+
+  // Bigger or smaller subtitles, remembered for next time
+  changeSubtitleScale (direction) {
+    const state = this.state
+    const scale = Math.max(0.3, Math.min(4,
+      (state.playing.subtitleScale || 1) + direction * 0.1))
+    state.playing.subtitleScale = Math.round(scale * 100) / 100
+    MpvPlayer.setSubtitleScale(state.playing.subtitleScale)
+    state.saved.prefs.subtitleScale = state.playing.subtitleScale
+    dispatch('stateSave')
+  }
+
+  rememberChoice (choice) {
+    const fileSummary = this.state.getPlayingFileSummary()
+    if (fileSummary) fileSummary.subtitleChoice = choice
+  }
 }
 
-// Checks whether a language name like 'English' or 'German' matches the system
-// language, aka the current locale
-function isSystemLanguage (language) {
-  const iso639 = require('iso-639-1')
-  const osLangISO = window.navigator.language.split('-')[0] // eg 'en'
-  const langIso = iso639.getCode(language) // eg 'de' if language is 'German'
-  return langIso === osLangISO
+function folderOf (file) {
+  return String(file.path || file.name || '').split(/[\\/]/).slice(0, -1).join('/')
 }
 
-// Make sure we don't have two subtitle tracks with the same label
-// Labels each track by language, eg 'German', 'English', 'English 2', ...
-function relabelSubtitles (subtitles) {
-  const counts = {}
-  subtitles.tracks.forEach(track => {
-    const lang = track.language
-    counts[lang] = (counts[lang] || 0) + 1
-    track.label = counts[lang] > 1 ? (lang + ' ' + counts[lang]) : lang
-  })
+// File name without its extension, lower case, for matching video to subtitle
+function baseName (name) {
+  return String(name || '').replace(/\.[^.]+$/, '').toLowerCase()
 }

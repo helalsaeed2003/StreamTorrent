@@ -21,9 +21,12 @@ const State = require('./lib/state')
 State.load(onState)
 
 const createGetter = require('fn-getter')
-const debounce = require('debounce')
 const dragDrop = require('drag-drop')
 const electron = require('electron')
+// Electron removed the built-in `remote` module, so `electron.remote` is
+// undefined and reading it threw on startup and whenever a video loaded.
+// The rest of the app already uses @electron/remote; use it here too.
+const remote = require('@electron/remote')
 const fs = require('fs')
 const React = require('react')
 const ReactDOM = require('react-dom')
@@ -32,6 +35,7 @@ const config = require('../config')
 const telemetry = require('./lib/telemetry')
 const sound = require('./lib/sound')
 const TorrentPlayer = require('./lib/torrent-player')
+const MpvPlayer = require('./lib/mpv-player')
 
 // Perf optimization: Needed immediately, so do not lazy load it below
 const TorrentListController = require('./controllers/torrent-list-controller')
@@ -72,6 +76,7 @@ function onState (err, _state) {
 
   telemetry.init(state)
   sound.init(state)
+  MpvPlayer.init(state, update)
 
   // Log uncaught JS errors
   window.addEventListener(
@@ -127,7 +132,13 @@ function onState (err, _state) {
   // Give global trackers
   setGlobalTrackers()
 
-  // Restart everything we were torrenting last time the app ran
+  // Work out where temporary files go, and make sure we can write there
+  controllers.prefs().applyTempPath()
+
+  // Throw away anything a previous run left in the temp folder
+  ipcRenderer.send('wt-wipe-temp')
+
+  // Hand out torrent keys, and fetch metadata for torrents we don't know yet
   resumeTorrents()
 
   // Initialize ReactDOM
@@ -156,23 +167,18 @@ function onState (err, _state) {
   // Add YouTube style hotkey shortcuts
   window.addEventListener('keydown', onKeydown)
 
-  const debouncedFullscreenToggle = debounce(() => {
-    dispatch('toggleFullScreen')
-  }, 1000, true)
-
   document.addEventListener('wheel', event => {
-    // ctrlKey detects pinch to zoom, http://crbug.com/289887
-    if (event.ctrlKey) {
-      event.preventDefault()
-      debouncedFullscreenToggle()
-    }
+    // ctrlKey detects pinch to zoom, http://crbug.com/289887.
+    // Swallow it so the page doesn't zoom, but don't toggle full screen: it
+    // fired by accident far too easily. Use the full screen button or F.
+    if (event.ctrlKey) event.preventDefault()
   })
 
   // ...focus and blur. Needed to show correct dock icon text ('badge') in OSX
   window.addEventListener('focus', onFocus)
   window.addEventListener('blur', onBlur)
 
-  if (electron.remote.getCurrentWindow().isVisible()) {
+  if (remote.getCurrentWindow().isVisible()) {
     sound.play('STARTUP')
   }
 
@@ -216,8 +222,16 @@ function lazyLoadCast () {
 // 3. dispatch - the event handler calls dispatch(), main.js sends it to a controller
 // 4. controller - the controller handles the event, changing the state object
 function update () {
-  controllers.playback().showOrHidePlayerControls()
-  app.setState(state)
+  const controlsChanged = controllers.playback().showOrHidePlayerControls()
+
+  // The video area grows and shrinks as the controls hide and show, and mpv
+  // draws in a window of its own, so it has to be told
+  if (controlsChanged) MpvPlayer.updateInsets(state)
+
+  // React drops the ref if a render throws, and update() runs on a timer, so
+  // without this one bad render would leave the app throwing here every second
+  // with a dead window. Skip the repaint instead and let the next one recover.
+  if (app) app.setState(state)
   updateElectron()
 }
 
@@ -263,6 +277,11 @@ const dispatchHandlers = {
     controllers.torrentList().deleteAllTorrents(deleteData),
   toggleSelectTorrent: (infoHash) =>
     controllers.torrentList().toggleSelectTorrent(infoHash),
+  toggleFolder: (infoHash, folderKey) =>
+    controllers.torrentList().toggleFolder(infoHash, folderKey),
+  setAllFoldersExpanded: (infoHash, expanded) =>
+    controllers.torrentList().setAllFoldersExpanded(infoHash, expanded),
+  idleTorrent: (infoHash) => controllers.torrentList().idleTorrent(infoHash),
   openTorrentContextMenu: (infoHash) =>
     controllers.torrentList().openTorrentContextMenu(infoHash),
   startTorrentingSummary: (torrentKey) =>
@@ -282,6 +301,21 @@ const dispatchHandlers = {
   preview: (x) => controllers.playback().preview(x),
   clearPreview: () => controllers.playback().clearPreview(),
   changePlaybackRate: (dir) => controllers.playback().changePlaybackRate(dir),
+  savePosition: () => controllers.playback().savePosition(),
+  mediaEnded: () => controllers.playback().mediaEnded(),
+  mpvReady: () => controllers.playback().mpvReady(),
+  mpvEnded: () => controllers.playback().mpvEnded(),
+  mpvMaybeLoad: () => controllers.playback().loadIntoMpv(),
+  startOver: () => controllers.playback().startOver(),
+  dismissResumeNote: () => controllers.playback().dismissResumeNote(),
+  clearFileProgress: (infoHash, index) =>
+    controllers.torrentList().clearFileProgress(infoHash, index),
+  toggleFileWatched: (infoHash, index) =>
+    controllers.torrentList().toggleFileWatched(infoHash, index),
+  openFileContextMenu: (infoHash, index) =>
+    controllers.torrentList().openFileContextMenu(infoHash, index),
+  setPlaybackRate: (rate) => controllers.playback().setPlaybackRate(rate),
+  togglePlaybackRateMenu: () => controllers.playback().togglePlaybackRateMenu(),
   changeVolume: (delta) => controllers.playback().changeVolume(delta),
   setVolume: (vol) => controllers.playback().setVolume(vol),
   openPath: (infoHash, index) => controllers.playback().openPath(infoHash, index),
@@ -289,9 +323,13 @@ const dispatchHandlers = {
   // Subtitles
   openSubtitles: () => controllers.subtitles().openSubtitles(),
   selectSubtitle: (index) => controllers.subtitles().selectSubtitle(index),
+  selectTorrentSubtitle: (index) => controllers.subtitles().selectTorrentSubtitle(index),
   toggleSubtitlesMenu: () => controllers.subtitles().toggleSubtitlesMenu(),
   checkForSubtitles: () => controllers.subtitles().checkForSubtitles(),
   addSubtitles: (files, autoSelect) => controllers.subtitles().addSubtitles(files, autoSelect),
+  changeSubtitleDelay: (dir) => controllers.subtitles().changeSubtitleDelay(dir),
+  resetSubtitleDelay: () => controllers.subtitles().resetSubtitleDelay(),
+  changeSubtitleScale: (dir) => controllers.subtitles().changeSubtitleScale(dir),
 
   // Audio Tracks
   selectAudioTrack: (index) => controllers.audioTracks().selectAudioTrack(index),
@@ -305,8 +343,10 @@ const dispatchHandlers = {
   mediaMouseMoved: () => controllers.media().mediaMouseMoved(),
   mediaControlsMouseEnter: () => controllers.media().controlsMouseEnter(),
   mediaControlsMouseLeave: () => controllers.media().controlsMouseLeave(),
-  openExternalPlayer: () => controllers.media().openExternalPlayer(),
-  externalPlayerNotFound: () => controllers.media().externalPlayerNotFound(),
+
+  // Image viewer
+  imageLoaded: () => controllers.media().imageLoaded(),
+  imageError: () => controllers.media().imageError(),
 
   // Remote casting: Chromecast, Airplay, etc
   toggleCastMenu: (deviceType) => lazyLoadCast().toggleMenu(deviceType),
@@ -316,6 +356,10 @@ const dispatchHandlers = {
   // Preferences screen
   preferences: () => controllers.prefs().show(),
   updatePreferences: (key, value) => controllers.prefs().update(key, value),
+  resetTempFolder: () => controllers.prefs().resetTempFolder(),
+  refreshTempUsage: () => controllers.prefs().refreshTempUsage(),
+  clearTempNow: () => controllers.prefs().clearTempNow(),
+  stopDownloading: () => controllers.playback().stopDownloading(),
   checkDownloadPath,
   updateGlobalTrackers: (trackers) => setGlobalTrackers(trackers),
   startFolderWatcher: () => controllers.folderWatcher().start(),
@@ -344,7 +388,11 @@ const dispatchHandlers = {
   error: onError,
   uncaughtError: (proc, err) => telemetry.logUncaughtError(proc, err),
   stateSave: () => State.save(state),
-  stateSaveImmediate: () => State.saveImmediate(state),
+  stateSaveImmediate: () => {
+    // Quitting mid-video still records where we got to
+    if (state.location.url() === 'player') controllers.playback().savePosition()
+    State.saveImmediate(state)
+  },
   update: () => {} // No-op, just trigger an update
 }
 
@@ -390,6 +438,8 @@ function setupIpc () {
   ipcRenderer.on('wt-poster', (e, ...args) => tc.torrentPosterSaved(...args))
   ipcRenderer.on('wt-audio-metadata', (e, ...args) => tc.torrentAudioMetadata(...args))
   ipcRenderer.on('wt-server-running', (e, ...args) => tc.torrentServerRunning(...args))
+  ipcRenderer.on('wt-file-ready', (e, ...args) =>
+    controllers.subtitles().subtitleFileReady(...args))
 
   ipcRenderer.on('wt-uncaught-error', (e, err) => telemetry.logUncaughtError('webtorrent', err))
 
@@ -424,7 +474,11 @@ function setGlobalTrackers () {
   controllers.torrentList().setGlobalTrackers(state.getGlobalTrackers())
 }
 
-// Starts all torrents that aren't paused on program startup
+// Called on program startup.
+// Nothing is downloaded unless the user plays it, so no torrent is resumed:
+// they all start out asleep and wake up when a file is played. The exception is
+// a torrent whose file list we never got - that one is started just long enough
+// to fetch its metadata, which downloads no file data.
 function resumeTorrents () {
   state.saved.torrents
     .map((torrentSummary) => {
@@ -433,14 +487,27 @@ function resumeTorrents () {
       torrentSummary.torrentKey = state.nextTorrentKey++
       return torrentSummary
     })
-    .filter((s) => s.status !== 'paused')
-    .forEach((s) => controllers.torrentList().startTorrentingSummary(s.torrentKey))
+    .forEach((s) => {
+      // Last run's progress and errors mean nothing: the data is gone
+      delete s.progress
+      delete s.error
+
+      // Clear any file selections left over from an earlier run, or from a
+      // version of the app that downloaded whole torrents. Nothing is fetched
+      // until the user plays something.
+      if (s.files) s.selections = s.files.map(() => false)
+      else delete s.selections
+
+      const needsMetadata = !s.files || s.files.length === 0
+      s.status = needsMetadata ? 'new' : 'paused'
+      if (needsMetadata) controllers.torrentList().startTorrentingSummary(s.torrentKey)
+    })
 }
 
 // Set window dimensions to match video dimensions or fill the screen
 function setDimensions (dimensions) {
   // Don't modify the window size if it's already maximized
-  if (electron.remote.getCurrentWindow().isMaximized()) {
+  if (remote.getCurrentWindow().isMaximized()) {
     state.window.bounds = null
     return
   }
@@ -452,7 +519,7 @@ function setDimensions (dimensions) {
     width: window.outerWidth,
     height: window.outerHeight
   }
-  state.window.wasMaximized = electron.remote.getCurrentWindow().isMaximized
+  state.window.wasMaximized = remote.getCurrentWindow().isMaximized()
 
   // Limit window size to screen size
   const screenWidth = window.screen.width
@@ -537,6 +604,14 @@ function onKeydown (e) {
   if (editableHtmlTags.has(e.target.tagName.toLowerCase())) return
 
   const key = e.key
+
+  // In the image viewer, the arrow keys step through the images in the folder
+  if (state.location.url() === 'player' && state.playing.type === 'image') {
+    if (key === 'ArrowLeft') dispatch('previousTrack')
+    else if (key === 'ArrowRight') dispatch('nextTrack')
+    update()
+    return
+  }
 
   if (key === 'ArrowLeft') {
     dispatch('skip', -5)

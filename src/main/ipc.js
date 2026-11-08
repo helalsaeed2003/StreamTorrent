@@ -186,33 +186,70 @@ function init () {
   ipcMain.on('toggleFullScreen', (e, ...args) => main.toggleFullScreen(...args))
   ipcMain.on('setAllowNav', (e, ...args) => menu.setAllowNav(...args))
 
+  // The renderer works the temp folder out from the saved preferences and
+  // tells us, so the cleanup at quit clears the right place
+  ipcMain.on('setTempPath', (e, dir, stale) => {
+    const streams = require('./streams')
+    streams.setPaths(dir, stale)
+  })
+
+  /**
+   * Video engine (mpv), drawing inside the main window
+   */
+
+  // Open the video surface and start mpv attached to it
+  ipcMain.on('mpv-open', async (e, insets) => {
+    const mpv = require('./mpv')
+    const video = windows.video
+
+    video.setInsets(insets && insets.top, insets && insets.bottom)
+    const win = video.create()
+    if (!win) return windows.main.send('mpv-error', 'Could not open the video area')
+
+    const wid = video.getHandle()
+    if (!wid) return windows.main.send('mpv-error', 'Could not get a window for the video')
+
+    try {
+      await mpv.start({ wid })
+      windows.main.send('mpv-ready')
+    } catch (err) {
+      windows.main.send('mpv-error', err.message)
+    }
+  })
+
+  // The controls showed or hid, so the video area changed shape
+  ipcMain.on('mpv-set-insets', (e, insets) => {
+    windows.video.setInsets(insets && insets.top, insets && insets.bottom)
+  })
+
+  ipcMain.on('mpv-load', (e, url, options) => {
+    require('./mpv').load(url, options)
+  })
+
+  ipcMain.on('mpv-command', (e, args) => {
+    require('./mpv').command(args)
+  })
+
+  ipcMain.on('mpv-set-property', (e, name, value) => {
+    require('./mpv').setProperty(name, value)
+  })
+
+  // Asks mpv for something and sends the answer back under a reply id
+  ipcMain.on('mpv-get-property', async (e, replyId, name) => {
+    const value = await require('./mpv').command(['get_property', name])
+    windows.main.send('mpv-property-reply', replyId, value)
+  })
+
+  // Close the player: stop mpv and take the video surface away
+  ipcMain.on('mpv-close', async () => {
+    await require('./mpv').stop()
+    windows.video.destroy()
+    windows.main.send('mpv-closed')
+  })
+
   /**
    * External Media Player
    */
-
-  ipcMain.on('checkForExternalPlayer', (e, path) => {
-    const externalPlayer = require('./external-player')
-
-    externalPlayer.checkInstall(path, err => {
-      windows.main.send('checkForExternalPlayer', !err)
-    })
-  })
-
-  ipcMain.on('openExternalPlayer', (e, ...args) => {
-    const externalPlayer = require('./external-player')
-    const shortcuts = require('./shortcuts')
-    const thumbar = require('./thumbar')
-
-    menu.togglePlaybackControls(false)
-    shortcuts.disable()
-    thumbar.disable()
-    externalPlayer.spawn(...args)
-  })
-
-  ipcMain.on('quitExternalPlayer', () => {
-    const externalPlayer = require('./external-player')
-    externalPlayer.kill()
-  })
 
   /**
    * Message passing
@@ -222,8 +259,13 @@ function init () {
   ipcMain.emit = (name, e, ...args) => {
     // Relay messages between the main window and the WebTorrent hidden window
     if (name.startsWith('wt-') && !app.isQuitting) {
-      console.dir(e.sender.getTitle())
-      if (e.sender.getTitle() === 'WebTorrent Hidden Window') {
+      // Work out where the message came from by comparing the sender itself,
+      // rather than matching on a window title that a rename could break
+      const hiddenWin = windows.webtorrent.win
+      const isFromHiddenWindow = !!hiddenWin && !hiddenWin.isDestroyed() &&
+        e.sender === hiddenWin.webContents
+
+      if (isFromHiddenWindow) {
         // Send message to main window
         windows.main.send(name, ...args)
         log('webtorrent: got %s', name)

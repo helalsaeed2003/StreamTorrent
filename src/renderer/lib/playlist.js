@@ -9,10 +9,14 @@ module.exports = {
 const TorrentSummary = require('./torrent-summary')
 const TorrentPlayer = require('./torrent-player')
 
+// Finding the neighbours means walking the file list, which can hold thousands
+// of entries, and hasNext()/hasPrevious() are called on every render. Cache the
+// answer until the torrent or the current file changes.
 const cache = {
   infoHash: null,
+  fileIndex: null,
+  fileCount: -1,
   previousIndex: null,
-  currentIndex: null,
   nextIndex: null
 }
 
@@ -46,43 +50,38 @@ function getCurrentLocalURL (state) {
 function updateCache (state) {
   const infoHash = state.playing.infoHash
   const fileIndex = state.playing.fileIndex
+  const torrentSummary = TorrentSummary.getByKey(state, infoHash)
+  const files = (torrentSummary && torrentSummary.files) || []
 
-  if (infoHash === cache.infoHash) {
-    switch (fileIndex) {
-      case cache.currentIndex:
-        return
-      case cache.nextIndex:
-        cache.previousIndex = cache.currentIndex
-        cache.currentIndex = fileIndex
-        cache.nextIndex = findNextIndex(state)
-        return
-      case cache.previousIndex:
-        cache.previousIndex = findPreviousIndex(state)
-        cache.nextIndex = cache.currentIndex
-        cache.currentIndex = fileIndex
-        return
-    }
-  } else {
-    cache.infoHash = infoHash
+  if (cache.infoHash === infoHash &&
+      cache.fileIndex === fileIndex &&
+      cache.fileCount === files.length) {
+    return
   }
 
-  cache.previousIndex = findPreviousIndex(state)
-  cache.currentIndex = fileIndex
-  cache.nextIndex = findNextIndex(state)
-}
+  cache.infoHash = infoHash
+  cache.fileIndex = fileIndex
+  cache.fileCount = files.length
+  cache.previousIndex = null
+  cache.nextIndex = null
 
-function findPreviousIndex (state) {
-  const files = TorrentSummary.getByKey(state, state.playing.infoHash).files
-  for (let i = state.playing.fileIndex - 1; i >= 0; i--) {
-    if (TorrentPlayer.isPlayable(files[i])) return i
-  }
-  return null
-}
+  const current = fileIndex == null ? null : files[fileIndex]
+  if (!current) return
 
-function findNextIndex (state) {
-  const files = TorrentSummary.getByKey(state, state.playing.infoHash).files
-  for (let i = state.playing.fileIndex + 1; i < files.length; i++) {
-    if (TorrentPlayer.isPlayable(files[i])) return i
+  // Images are browsed inside their own folder, like a photo viewer.
+  // Audio and video keep running through the whole torrent, as before.
+  const byImage = TorrentPlayer.isImage(current)
+  const folder = byImage ? TorrentPlayer.getFolder(current) : null
+  const matches = (file) => {
+    if (!file) return false
+    if (!byImage) return TorrentPlayer.isMedia(file)
+    return TorrentPlayer.isImage(file) && TorrentPlayer.getFolder(file) === folder
   }
-  return null
+
+  for (let i = fileIndex - 1; i >= 0; i--) {
+    if (matches(files[i])) { cache.previousIndex = i; break }
+  }
+  for (let i = fileIndex + 1; i < files.length; i++) {
+    if (matches(files[i])) { cache.nextIndex = i; break }
+  }
 }

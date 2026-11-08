@@ -17,23 +17,72 @@
         height: 65px;
       }
       h1 {
-        font-size: 0.9em;
+        font-size: 0.95em;
+        margin-bottom: 0.4em;
         -webkit-user-select: text;
       }
       p {
-        font-size: 0.8em;
+        font-size: 0.78em;
+        margin: 0.5em 0;
         -webkit-user-select: text;
+      }
+      a {
+        color: #3f51b5;
+        cursor: pointer;
+      }
+      .credit {
+        color: #666;
+        font-size: 0.72em;
+        line-height: 1.5;
       }
     </style>
   </head>
   <body>
-    <img src="../static/WebTorrent.png">
-    <h1>WebTorrent</h1>
+    <img src="../static/StreamTorrent.png">
+    <h1><script>document.write(require('../build/config').APP_NAME)</script></h1>
     <p>
       Version <script>document.write(require('../package.json').version)</script>
       (<script>document.write(require('webtorrent/package.json').version)</script>)
       (<script>document.write(process.arch)</script>)
     </p>
-    <p><script>document.write(require('../build/config').APP_COPYRIGHT)</script></p>
+    <p class="credit">
+      <script>document.write(require('../build/config').APP_BASED_ON)</script><br>
+      <script>document.write(require('../build/config').APP_COPYRIGHT)</script>
+    </p>
+    <p class="credit">
+      Video engine: mpv
+      <script>document.write(require('../build/config').MPV_VERSION)</script><br>
+      with FFmpeg
+      <script>document.write(require('../build/config').MPV_FFMPEG_VERSION)</script><br>
+      <a id="licences">Open source licences &amp; source code</a>
+    </p>
+    <script>
+      const path = require('path')
+      const config = require('../build/config')
+      const remote = require('@electron/remote')
+      const { BrowserWindow } = remote
+
+      document.getElementById('licences').onclick = () => {
+        const win = new BrowserWindow({
+          backgroundColor: '#ECECEC',
+          center: true,
+          width: 640,
+          height: 560,
+          minimizable: false,
+          skipTaskbar: true,
+          title: 'Open source licences',
+          useContentSize: true,
+          webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false,
+            backgroundThrottling: false
+          }
+        })
+        // The licences page reads the config, which needs @electron/remote
+        remote.require('@electron/remote/main').enable(win.webContents)
+        win.setMenuBarVisibility(false)
+        win.loadURL('file://' + path.join(config.STATIC_PATH, 'licenses.html'))
+      }
+    </script>
   </body>
 </html>

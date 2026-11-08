@@ -1,12 +1,15 @@
-const { ipcRenderer } = require('electron')
 const telemetry = require('../lib/telemetry')
-const Playlist = require('../lib/playlist')
+const { dispatch } = require('../lib/dispatcher')
 
-// Controls local play back: the <video>/<audio> tag and VLC
+// How often the playback position is written down while a video plays
+const SAVE_POSITION_EVERY = 5000
+
+// Controls local play back: the <video>/<audio> tag and the embedded player
 // Does not control remote casting (Chromecast etc)
 module.exports = class MediaController {
   constructor (state) {
     this.state = state
+    this.lastPositionSave = 0
   }
 
   mediaSuccess () {
@@ -17,25 +20,44 @@ module.exports = class MediaController {
     this.state.playing.isStalled = true
   }
 
+  // The image viewer finished downloading and decoding the picture
+  imageLoaded () {
+    this.state.playing.imageLoaded = true
+    this.state.playing.isReady = true
+    telemetry.logPlayAttempt('success')
+  }
+
+  imageError () {
+    dispatch('error', `Couldn't show ${this.state.playing.fileName}`)
+  }
+
+  /**
+   * Playback failed. Video goes through the embedded mpv engine, which plays
+   * everything, so this only comes up for audio the browser cannot decode -
+   * and there is no second app to send it to any more, so just say so.
+   */
   mediaError (error) {
     const state = this.state
-    if (state.location.url() === 'player') {
-      telemetry.logPlayAttempt('error')
-      state.playing.location = 'error'
-      ipcRenderer.send('checkForExternalPlayer', state.saved.prefs.externalPlayerPath)
-      ipcRenderer.once('checkForExternalPlayer', (e, isInstalled) => {
-        state.modal = {
-          id: 'unsupported-media-modal',
-          error,
-          externalPlayerInstalled: isInstalled
-        }
-      })
-    }
+    if (state.location.url() !== 'player') return
+    if (state.playing.location !== 'local') return
+
+    telemetry.logPlayAttempt('error')
+    const name = state.playing.fileName || 'that file'
+    console.error('playback failed for %s: %s', name, error)
+    dispatch('error', `Couldn't play ${name}`)
   }
 
   mediaTimeUpdate () {
-    this.state.playing.lastTimeUpdate = new Date().getTime()
+    const now = new Date().getTime()
+    this.state.playing.lastTimeUpdate = now
     this.state.playing.isStalled = false
+
+    // Save how far through the video we are every few seconds, so closing the
+    // app or losing power never costs more than that
+    if (now - this.lastPositionSave > SAVE_POSITION_EVERY) {
+      this.lastPositionSave = now
+      dispatch('savePosition')
+    }
   }
 
   mediaMouseMoved () {
@@ -50,31 +72,5 @@ module.exports = class MediaController {
   controlsMouseLeave () {
     this.state.playing.mouseInControls = false
     this.state.playing.mouseStationarySince = new Date().getTime()
-  }
-
-  openExternalPlayer () {
-    const state = this.state
-    state.playing.location = 'external'
-
-    const onServerRunning = () => {
-      state.playing.isReady = true
-      telemetry.logPlayAttempt('external')
-
-      const mediaURL = Playlist.getCurrentLocalURL(state)
-      ipcRenderer.send('openExternalPlayer',
-        state.saved.prefs.externalPlayerPath,
-        mediaURL,
-        state.window.title)
-    }
-
-    if (state.server != null) onServerRunning()
-    else ipcRenderer.once('wt-server-running', onServerRunning)
-  }
-
-  externalPlayerNotFound () {
-    const modal = this.state.modal
-    if (modal && modal.id === 'unsupported-media-modal') {
-      modal.externalPlayerNotFound = true
-    }
   }
 }

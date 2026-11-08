@@ -14,6 +14,7 @@ const ipc = require('./ipc')
 const log = require('./log')
 const menu = require('./menu')
 const State = require('../renderer/lib/state')
+const streams = require('./streams')
 const windows = require('./windows')
 
 const WEBTORRENT_VERSION = require('webtorrent/package.json').version
@@ -82,6 +83,11 @@ function init () {
     isReady = true
     const state = results.state
 
+    // Nothing played in a previous run should still be on disk. Clear the temp
+    // folder before any window opens, in case the last run crashed or Windows
+    // shut down before the cleanup could happen.
+    streams.wipe(state.saved)
+
     menu.init()
     windows.main.init(state, { hidden })
     windows.webtorrent.init()
@@ -103,7 +109,8 @@ function init () {
   // on Mac, %APPDATA% on Windows, $XDG_CONFIG_HOME or ~/.config on Linux.
   app.setAppLogsPath()
 
-  app.userAgentFallback = `WebTorrent/${WEBTORRENT_VERSION} (https://webtorrent.io)`
+  // Identify as StreamTorrent to web servers and web seeds, with no link out
+  app.userAgentFallback = `${config.APP_NAME}/${config.APP_VERSION} (WebTorrent/${WEBTORRENT_VERSION})`
 
   app.on('open-file', onOpen)
   app.on('open-url', onOpen)
@@ -121,12 +128,46 @@ function init () {
 
     app.isQuitting = true
     e.preventDefault()
-    windows.main.dispatch('stateSaveImmediate') // try to save state on exit
-    ipcMain.once('stateSaved', () => app.quit())
-    setTimeout(() => {
-      console.error('Saving state took too long. Quitting.')
+
+    let finished = false
+    function finish () {
+      if (finished) return
+      finished = true
+      // Last word on the temp folder, in case a handle was still open when the
+      // WebTorrent process cleared it
+      streams.wipe()
       app.quit()
-    }, 4000) // quit after 4 secs, at most
+    }
+
+    // 1. Save the torrent list, settings and open folders
+    windows.main.dispatch('stateSaveImmediate')
+
+    ipcMain.once('stateSaved', async () => {
+      // 2. Stop the video engine. It has the file being watched open, and
+      //    Windows will not delete a file while a handle on it is alive.
+      try {
+        await require('./mpv').stop()
+        windows.video.destroy()
+      } catch (err) {
+        log('Could not stop the video engine', err)
+      }
+
+      // 3. Have the WebTorrent process close every file it has open and clear
+      //    the temp folder, then finish quitting
+      ipcMain.once('wt-destroyed-all', finish)
+      try {
+        windows.webtorrent.send('wt-destroy-all')
+      } catch (err) {
+        log('Could not ask the WebTorrent process to clean up', err)
+        return finish()
+      }
+      setTimeout(finish, 6000)
+    })
+
+    setTimeout(() => {
+      console.error('Shutting down took too long. Quitting.')
+      finish()
+    }, 10000)
   })
 
   app.on('activate', () => {
@@ -137,15 +178,14 @@ function init () {
 function delayedInit (state) {
   if (app.isQuitting) return
 
-  const announcement = require('./announcement')
   const dock = require('./dock')
-  const updater = require('./updater')
   const FolderWatcher = require('./folder-watcher')
   const folderWatcher = new FolderWatcher({ window: windows.main, state })
 
-  announcement.init()
   dock.init()
-  updater.init()
+
+  // No auto-updater, and no announcement check: StreamTorrent never phones
+  // home, and must never replace itself with a different build.
 
   ipc.setModule('folderWatcher', folderWatcher)
   if (folderWatcher.isEnabled()) {
@@ -157,10 +197,8 @@ function delayedInit (state) {
     userTasks.init()
   }
 
-  if (process.platform !== 'darwin') {
-    const tray = require('./tray')
-    tray.init()
-  }
+  // No tray icon: closing the window quits the app and clears the temp folder,
+  // rather than leaving it running out of sight holding on to the files
 }
 
 function onOpen (e, torrentId) {

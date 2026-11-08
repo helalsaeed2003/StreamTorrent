@@ -983,3 +983,374 @@ video::-webkit-media-text-track-container {
 .control * {
   cursor: default !important;
 }
+
+/*
+ * TORRENT LIST: FILE TREE (folders + files)
+ */
+
+.torrent-details tr.folder-row {
+  cursor: default;
+  -webkit-app-region: no-drag;
+}
+
+.torrent-details tr.folder-row:hover,
+.torrent-details tr.file-row:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.torrent-details td.col-name .icon.chevron,
+.torrent-details td.col-name .icon.folder {
+  font-size: 18px;
+  position: relative;
+  top: 3px;
+  opacity: 0.75;
+}
+
+.torrent-details td.col-name .icon.chevron {
+  margin-right: 1px;
+  margin-left: -4px;
+}
+
+.torrent-details td.col-name .icon.folder {
+  margin-right: 5px;
+}
+
+.torrent-details tr.folder-row .folder-name {
+  font-weight: bold;
+}
+
+.torrent-details tr.folder-row td.col-size {
+  opacity: 0.6;
+  font-size: 11px;
+}
+
+/* The file that was played last: where the user left off */
+.torrent-details tr.file-row.last-played {
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: inset 3px 0 0 #ff4081;
+}
+
+.torrent-details tr.file-row.last-played:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* The file being downloaded right now */
+.torrent-details tr.file-row.streaming td.col-progress {
+  color: #ff4081;
+}
+
+/* Files that have already been played keep a checkmark, across restarts */
+.torrent-details td.col-select .icon.played-check {
+  font-size: 16px;
+  opacity: 0.8;
+  color: #8bc34a;
+}
+
+.torrent-details tr.file-row.played td.col-name {
+  opacity: 0.75;
+}
+
+/*
+ * IMAGE VIEWER
+ */
+
+.player.image-player .letterbox.image-viewer {
+  position: relative;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.player .image-view {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  margin: auto;
+  object-fit: contain;
+}
+
+.player .image-view.loading {
+  display: none;
+}
+
+.player.image-player .media-stalled {
+  margin: auto;
+}
+
+/* Big click targets over the left and right edges of the picture */
+.player .icon.image-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 48px;
+  padding: 16px 8px;
+  cursor: default;
+  -webkit-app-region: no-drag;
+  opacity: 0.45;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 4px;
+  transition: opacity 0.15s ease-out;
+  user-select: none;
+}
+
+.player .icon.image-nav:hover {
+  opacity: 0.95;
+}
+
+.player .icon.image-nav.prev {
+  left: 10px;
+}
+
+.player .icon.image-nav.next {
+  right: 10px;
+}
+
+.player .controls.image-controls .time {
+  max-width: calc(100% - 160px);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/*
+ * PLAYER: PLAYBACK SPEED
+ */
+
+.player .controls .playback-rate {
+  display: block;
+  margin: 8px 6px;
+  min-width: 34px;
+  height: 22px;
+  line-height: 22px;
+  padding: 0 4px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: bold;
+  opacity: 0.85;
+  border-radius: 3px;
+  cursor: default;
+  -webkit-app-region: no-drag;
+  user-select: none;
+}
+
+.player .controls .playback-rate:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.player .controls .playback-rate.active {
+  color: #ff4081;
+}
+
+.player .controls .options-list.playback-rate-options {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+/*
+ * TORRENT LIST: WATCH PROGRESS AND CONTINUE WATCHING
+ */
+
+.torrent-details td.col-name .file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.watch-progress {
+  display: flex;
+  align-items: center;
+  margin-top: 1px;
+  opacity: 0.75;
+}
+
+.watch-bar {
+  flex: 1 1 auto;
+  max-width: 120px;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.watch-bar-fill {
+  height: 100%;
+  background: #ff4081;
+}
+
+.watch-time {
+  flex: 0 0 auto;
+  margin-left: 8px;
+  font-size: 11px;
+}
+
+.torrent-details tr.file-row.in-progress td.col-name {
+  opacity: 1;
+}
+
+.continue-watching {
+  padding: 12px 15px 14px 15px;
+  background: #222;
+  border-bottom: 1px solid #333;
+}
+
+.continue-heading {
+  font-size: 13px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 8px;
+}
+
+.continue-row {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.continue-item {
+  flex: 0 0 170px;
+  background: #2d2d2d;
+  border-radius: 4px;
+  padding: 8px 10px;
+  cursor: default;
+  -webkit-app-region: no-drag;
+  transition: background 0.1s ease-out;
+}
+
+.continue-item:hover {
+  background: #3a3a3a;
+}
+
+.continue-name {
+  font-size: 13px;
+  font-weight: bold;
+  margin-bottom: 2px;
+}
+
+.continue-torrent {
+  font-size: 11px;
+  opacity: 0.6;
+  margin-bottom: 6px;
+}
+
+.continue-time {
+  font-size: 11px;
+  opacity: 0.7;
+  margin-top: 4px;
+}
+
+/*
+ * PLAYER: "RESUMED FROM" NOTE
+ */
+
+.player .resume-note {
+  position: absolute;
+  left: 20px;
+  bottom: 60px;
+  display: flex;
+  align-items: center;
+  background: rgba(40, 40, 40, 0.9);
+  color: #eee;
+  border-radius: 4px;
+  padding: 8px 10px;
+  font-size: 13px;
+  animation: fadein 0.3s;
+  z-index: 1;
+}
+
+.player .resume-note .resume-action {
+  margin-left: 10px;
+  color: #ff4081;
+  font-weight: bold;
+  cursor: default;
+  -webkit-app-region: no-drag;
+}
+
+.player .resume-note .resume-action:hover {
+  text-decoration: underline;
+}
+
+.player .resume-note .icon.resume-dismiss {
+  font-size: 16px;
+  margin-left: 8px;
+  opacity: 0.6;
+  cursor: default;
+}
+
+.player .resume-note .icon.resume-dismiss:hover {
+  opacity: 1;
+}
+
+/*
+ * PLAYER: SUBTITLE MENU
+ */
+
+.player .controls .options-list.subtitle-options {
+  max-height: 70vh;
+  overflow-y: auto;
+  min-width: 240px;
+  max-width: 420px;
+}
+
+.player .controls .options-list li {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+  -webkit-app-region: no-drag;
+}
+
+.player .controls .options-list li:hover {
+  color: #fff;
+}
+
+.player .controls .options-list li.options-heading {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.55;
+  margin-top: 6px;
+  cursor: default;
+}
+
+.player .controls .options-list li.options-heading:first-child {
+  margin-top: 0;
+}
+
+.player .controls .options-list li.options-adjust {
+  display: flex;
+  align-items: center;
+}
+
+.player .controls .options-list li.options-adjust .adjust-label {
+  flex: 1 1 auto;
+  margin-right: 10px;
+}
+
+.player .controls .options-list li.options-adjust .icon {
+  font-size: 18px;
+  margin: 0 2px;
+  opacity: 0.7;
+}
+
+.player .controls .options-list li.options-adjust .icon:hover {
+  opacity: 1;
+}
+
+.player .controls .icon.closed-caption.dim {
+  opacity: 0.45;
+}
+
+/* mpv paints the video itself, so this area only holds what goes on top */
+.player.mpv-player .letterbox.mpv-video {
+  position: relative;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+}
+
+.player.mpv-player .letterbox.mpv-video .media-stalled {
+  margin: auto;
+}

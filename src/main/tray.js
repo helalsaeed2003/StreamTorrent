@@ -89,7 +89,7 @@ function getMenuTemplate () {
       }
     } else {
       return {
-        label: 'Show WebTorrent',
+        label: 'Show ' + config.APP_NAME,
         click: () => windows.main.show()
       }
     }

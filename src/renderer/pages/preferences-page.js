@@ -8,8 +8,11 @@ const TextField = require('material-ui/TextField').default
 const Heading = require('../components/heading')
 const PathSelector = require('../components/path-selector')
 
+const prettyBytes = require('prettier-bytes')
+
 const { dispatch } = require('../lib/dispatcher')
 const config = require('../../config')
+const tempPathLib = require('../../temp-path')
 
 class PreferencesPage extends React.Component {
   constructor (props) {
@@ -17,12 +20,6 @@ class PreferencesPage extends React.Component {
 
     this.handleDownloadPathChange =
       this.handleDownloadPathChange.bind(this)
-
-    this.handleOpenExternalPlayerChange =
-      this.handleOpenExternalPlayerChange.bind(this)
-
-    this.handleExternalPlayerPathChange =
-      this.handleExternalPlayerPathChange.bind(this)
 
     this.handleStartupChange =
       this.handleStartupChange.bind(this)
@@ -32,6 +29,10 @@ class PreferencesPage extends React.Component {
 
     this.handleSetGlobalTrackers =
       this.handleSetGlobalTrackers.bind(this)
+
+    this.handleTempPathChange = this.handleTempPathChange.bind(this)
+    this.handleTempPathReset = this.handleTempPathReset.bind(this)
+    this.handleClearTempNow = this.handleClearTempNow.bind(this)
 
     const globalTrackers = this.props.state.getGlobalTrackers().join('\n')
 
@@ -60,23 +61,6 @@ class PreferencesPage extends React.Component {
     dispatch('updatePreferences', 'downloadPath', filePath)
   }
 
-  openExternalPlayerCheckbox () {
-    return (
-      <Preference>
-        <Checkbox
-          className='control'
-          checked={!this.props.state.saved.prefs.openExternalPlayer}
-          label='Play torrent media files using WebTorrent'
-          onCheck={this.handleOpenExternalPlayerChange}
-        />
-      </Preference>
-    )
-  }
-
-  handleOpenExternalPlayerChange (e, isChecked) {
-    dispatch('updatePreferences', 'openExternalPlayer', !isChecked)
-  }
-
   highestPlaybackPriorityCheckbox () {
     return (
       <Preference>
@@ -93,34 +77,6 @@ class PreferencesPage extends React.Component {
 
   handleHighestPlaybackPriorityChange (e, isChecked) {
     dispatch('updatePreferences', 'highestPlaybackPriority', isChecked)
-  }
-
-  externalPlayerPathSelector () {
-    const playerPath = this.props.state.saved.prefs.externalPlayerPath
-    const playerName = this.props.state.getExternalPlayerName()
-
-    const description = this.props.state.saved.prefs.openExternalPlayer
-      ? `Torrent media files will always play in ${playerName}.`
-      : `Torrent media files will play in ${playerName} if WebTorrent cannot play them.`
-
-    return (
-      <Preference>
-        <p>{description}</p>
-        <PathSelector
-          dialog={{
-            title: 'Select media player app',
-            properties: ['openFile']
-          }}
-          onChange={this.handleExternalPlayerPathChange}
-          title='External player'
-          value={playerPath}
-        />
-      </Preference>
-    )
-  }
-
-  handleExternalPlayerPathChange (filePath) {
-    dispatch('updatePreferences', 'externalPlayerPath', filePath)
   }
 
   autoAddTorrentsCheckbox () {
@@ -272,6 +228,67 @@ class PreferencesPage extends React.Component {
     dispatch('updateGlobalTrackers', announceList)
   }
 
+  // Where files being streamed are kept. Everything in here is temporary and is
+  // cleared when the app quits.
+  tempPathSelector () {
+    const prefs = this.props.state.saved.prefs
+    const usage = this.props.state.tempUsage || {}
+    const inUse = this.props.state.tempPath || config.TEMP_PATH
+    const isDefault = !prefs.tempPath
+
+    const noteStyle = {
+      fontSize: 13,
+      marginTop: 6,
+      marginBottom: 6,
+      overflowWrap: 'anywhere'
+    }
+    const buttonStyle = { marginRight: 10 }
+
+    return (
+      <Preference>
+        <PathSelector
+          dialog={{
+            title: 'Choose where temporary video files go',
+            properties: ['openDirectory']
+          }}
+          onChange={this.handleTempPathChange}
+          title='Temporary files'
+          value={isDefault ? inUse + '  (default)' : prefs.tempPath}
+        />
+        <div style={noteStyle}>
+          A folder named “{tempPathLib.DEDICATED_FOLDER_NAME}” is used inside whichever
+          folder you pick, and only files inside it are ever deleted.
+          <br />
+          Currently using <strong>{prettyBytes(usage.bytes || 0)}</strong> in {inUse}
+        </div>
+        <RaisedButton
+          className='control'
+          label='Reset to default'
+          style={buttonStyle}
+          disabled={isDefault}
+          onClick={this.handleTempPathReset}
+        />
+        <RaisedButton
+          className='control'
+          label='Clear now'
+          onClick={this.handleClearTempNow}
+        />
+      </Preference>
+    )
+  }
+
+  handleTempPathChange (filePath) {
+    dispatch('updatePreferences', 'tempPath', filePath)
+  }
+
+  handleTempPathReset () {
+    dispatch('resetTempFolder')
+  }
+
+  handleClearTempNow () {
+    dispatch('clearTempNow')
+  }
+
   render () {
     const style = {
       color: colors.grey400,
@@ -282,12 +299,11 @@ class PreferencesPage extends React.Component {
       <div style={style}>
         <PreferencesSection title='Folders'>
           {this.downloadPathSelector()}
+          {this.tempPathSelector()}
           {this.autoAddTorrentsCheckbox()}
           {this.torrentsFolderPathSelector()}
         </PreferencesSection>
         <PreferencesSection title='Playback'>
-          {this.openExternalPlayerCheckbox()}
-          {this.externalPlayerPathSelector()}
           {this.highestPlaybackPriorityCheckbox()}
         </PreferencesSection>
         <PreferencesSection title='Default torrent app'>

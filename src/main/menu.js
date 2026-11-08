@@ -182,7 +182,7 @@ function getMenuTemplate () {
               click: () => windows.main.toggleDevTools()
             },
             {
-              label: 'Show WebTorrent Process',
+              label: 'Show Torrent Engine Process',
               accelerator: process.platform === 'darwin'
                 ? 'Alt+Command+P'
                 : 'Ctrl+Shift+P',
@@ -299,44 +299,11 @@ function getMenuTemplate () {
     {
       label: 'Help',
       role: 'help',
+      // No links out to any website: this build does not point anywhere online
       submenu: [
         {
-          label: 'Learn more about ' + config.APP_NAME,
-          click: () => {
-            const shell = require('./shell')
-            shell.openExternal(config.HOME_PAGE_URL)
-          }
-        },
-        {
-          label: 'Release Notes',
-          click: () => {
-            const shell = require('./shell')
-            shell.openExternal(config.GITHUB_URL_RELEASES)
-          }
-        },
-        {
-          label: 'Contribute on GitHub',
-          click: () => {
-            const shell = require('./shell')
-            shell.openExternal(config.GITHUB_URL)
-          }
-        },
-        {
-          type: 'separator'
-        },
-        {
-          label: 'Report an Issue...',
-          click: () => {
-            const shell = require('./shell')
-            shell.openExternal(config.GITHUB_URL_ISSUES)
-          }
-        },
-        {
-          label: 'Follow us on Twitter',
-          click: () => {
-            const shell = require('./shell')
-            shell.openExternal(config.TWITTER_PAGE_URL)
-          }
+          label: 'About ' + config.APP_NAME,
+          click: () => windows.about.init()
         }
       ]
     }

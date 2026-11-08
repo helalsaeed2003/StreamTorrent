@@ -53,7 +53,7 @@ function show () {
 }
 
 function send (...args) {
-  if (!webtorrent.win) return
+  if (!webtorrent.win || webtorrent.win.isDestroyed()) return
   webtorrent.win.send(...args)
 }
 

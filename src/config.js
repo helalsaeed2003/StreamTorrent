@@ -1,15 +1,30 @@
-const appConfig = require('application-config')('WebTorrent')
 const path = require('path')
-const { app } = require('electron')
 const arch = require('arch')
 
-const APP_NAME = 'WebTorrent'
+// Build scripts load this file with plain Node, where requiring electron throws
+// if its binary has not been unpacked yet. `app` is only ever used from inside
+// the Electron main process, so falling back to undefined here is harmless.
+let app
+try {
+  ({ app } = require('electron'))
+} catch (err) {
+  app = undefined
+}
+
+const APP_NAME = 'StreamTorrent'
 const APP_TEAM = 'WebTorrent, LLC'
 const APP_VERSION = require('../package.json').version
 
+// StreamTorrent keeps its settings in a folder of its own, so it can live side
+// by side with an official WebTorrent Desktop install without the two sharing
+// settings, torrents or saved magnet links.
+const appConfig = require('application-config')(APP_NAME)
+
+const ROOT_PATH = path.join(__dirname, '..')
+
 const IS_TEST = isTest()
 const PORTABLE_PATH = IS_TEST
-  ? path.join(process.platform === 'win32' ? 'C:\\Windows\\Temp' : '/tmp', 'WebTorrentTest')
+  ? path.join(process.platform === 'win32' ? 'C:\\Windows\\Temp' : '/tmp', 'StreamTorrentTest')
   : path.join(path.dirname(process.execPath), 'Portable Settings')
 const IS_PRODUCTION = isProduction()
 const IS_PORTABLE = isPortable()
@@ -18,65 +33,28 @@ const UI_HEADER_HEIGHT = 38
 const UI_TORRENT_HEIGHT = 100
 
 module.exports = {
-  ANNOUNCEMENT_URL: 'https://webtorrent.io/desktop/announcement',
-  AUTO_UPDATE_URL: 'https://webtorrent.io/desktop/update',
-  CRASH_REPORT_URL: 'https://webtorrent.io/desktop/crash-report',
-  TELEMETRY_URL: 'https://webtorrent.io/desktop/telemetry',
-
   APP_COPYRIGHT: `Copyright © 2014-${new Date().getFullYear()} ${APP_TEAM}`,
-  APP_FILE_ICON: path.join(__dirname, '..', 'static', 'WebTorrentFile'),
-  APP_ICON: path.join(__dirname, '..', 'static', 'WebTorrent'),
+  // StreamTorrent is a modified build of WebTorrent Desktop, which is MIT
+  // licensed. The notice above and the LICENSE file are kept as the licence
+  // requires, and this line is shown in the About window.
+  APP_BASED_ON: 'Based on WebTorrent Desktop (MIT licensed)',
+  APP_FILE_ICON: path.join(ROOT_PATH, 'static', 'StreamTorrentFile'),
+  APP_ICON: path.join(ROOT_PATH, 'static', 'StreamTorrent'),
   APP_NAME,
   APP_TEAM,
+  // Who the Windows installer lists as the publisher. The copyright above still
+  // credits the authors of the code this is built from, as the licence requires.
+  APP_PUBLISHER: APP_NAME,
   APP_VERSION,
   APP_WINDOW_TITLE: APP_NAME,
 
   CONFIG_PATH: getConfigPath(),
 
-  DEFAULT_TORRENTS: [
-    {
-      testID: 'bbb',
-      name: 'Big Buck Bunny',
-      posterFileName: 'bigBuckBunny.jpg',
-      torrentFileName: 'bigBuckBunny.torrent'
-    },
-    {
-      testID: 'cosmos',
-      name: 'Cosmos Laundromat (Preview)',
-      posterFileName: 'cosmosLaundromat.jpg',
-      torrentFileName: 'cosmosLaundromat.torrent'
-    },
-    {
-      testID: 'sintel',
-      name: 'Sintel',
-      posterFileName: 'sintel.jpg',
-      torrentFileName: 'sintel.torrent'
-    },
-    {
-      testID: 'tears',
-      name: 'Tears of Steel',
-      posterFileName: 'tearsOfSteel.jpg',
-      torrentFileName: 'tearsOfSteel.torrent'
-    },
-    {
-      testID: 'wired',
-      name: 'The WIRED CD - Rip. Sample. Mash. Share',
-      posterFileName: 'wiredCd.jpg',
-      torrentFileName: 'wiredCd.torrent'
-    }
-  ],
+  DEFAULT_TORRENTS: [],
 
   DELAYED_INIT: 3000 /* 3 seconds */,
 
   DEFAULT_DOWNLOAD_PATH: getDefaultDownloadPath(),
-
-  GITHUB_URL: 'https://github.com/webtorrent/webtorrent-desktop',
-  GITHUB_URL_ISSUES: 'https://github.com/webtorrent/webtorrent-desktop/issues',
-  GITHUB_URL_RAW: 'https://raw.githubusercontent.com/webtorrent/webtorrent-desktop/master',
-  GITHUB_URL_RELEASES: 'https://github.com/webtorrent/webtorrent-desktop/releases',
-
-  HOME_PAGE_URL: 'https://webtorrent.io',
-  TWITTER_PAGE_URL: 'https://twitter.com/WebTorrentApp',
 
   IS_PORTABLE,
   IS_PRODUCTION,
@@ -85,13 +63,42 @@ module.exports = {
   OS_SYSARCH: arch() === 'x64' ? 'x64' : 'ia32',
 
   POSTER_PATH: path.join(getConfigPath(), 'Posters'),
-  ROOT_PATH: path.join(__dirname, '..'),
-  STATIC_PATH: path.join(__dirname, '..', 'static'),
+  ROOT_PATH,
+  STATIC_PATH: path.join(ROOT_PATH, 'static'),
   TORRENT_PATH: path.join(getConfigPath(), 'Torrents'),
 
-  WINDOW_ABOUT: 'file://' + path.join(__dirname, '..', 'static', 'about.html'),
-  WINDOW_MAIN: 'file://' + path.join(__dirname, '..', 'static', 'main.html'),
-  WINDOW_WEBTORRENT: 'file://' + path.join(__dirname, '..', 'static', 'webtorrent.html'),
+  // Scratch space for the files being previewed. It lives inside the program's
+  // own folder (next to the executable, or in "Portable Settings" for the
+  // portable build), is kept while the app is running so that replaying a file
+  // is instant, and is deleted when the app starts and when it quits.
+  TEMP_PATH: getTempPath(),
+
+  // The speeds offered by the playback speed menu, and stepped through by the
+  // < and > keys
+  PLAYBACK_RATES: [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 3, 4],
+
+  // The bundled video engine. Shipped inside the app, so there is nothing to
+  // install and nothing on the machine it could pick up instead.
+  MPV_PATH: getMpvPath(),
+
+  // The exact builds bundled, and where their source code can be obtained.
+  // mpv and FFmpeg are free software; the licence texts ship in
+  // static/licenses and are reachable from the About window.
+  MPV_VERSION: 'v0.42.0-5-g55d3feb45',
+  MPV_FFMPEG_VERSION: 'N-128607-g1ddef7d76',
+  MPV_SOURCE_URL: 'https://github.com/mpv-player/mpv',
+  FFMPEG_SOURCE_URL: 'https://github.com/FFmpeg/FFmpeg',
+  LICENSES_PATH: path.join(ROOT_PATH, 'static', 'licenses'),
+
+  // Subtitle files we can offer to load out of a torrent
+  SUBTITLE_EXTENSIONS: ['.srt', '.ass', '.ssa', '.vtt', '.sub', '.idx'],
+
+  // How far the subtitle timing moves per nudge, in seconds
+  SUBTITLE_DELAY_STEP: 0.1,
+
+  WINDOW_ABOUT: 'file://' + path.join(ROOT_PATH, 'static', 'about.html'),
+  WINDOW_MAIN: 'file://' + path.join(ROOT_PATH, 'static', 'main.html'),
+  WINDOW_WEBTORRENT: 'file://' + path.join(ROOT_PATH, 'static', 'webtorrent.html'),
 
   WINDOW_INITIAL_BOUNDS: {
     width: 500,
@@ -110,6 +117,27 @@ function getConfigPath () {
   } else {
     return path.dirname(appConfig.filePath)
   }
+}
+
+// The folder the program itself lives in. For an installed build that is the
+// folder holding the .exe; in development it is the repository.
+function getProgramPath () {
+  return IS_PRODUCTION ? path.dirname(process.execPath) : ROOT_PATH
+}
+
+// mpv lives in the app's resources once packaged, and in vendor/ in development
+function getMpvPath () {
+  const exe = process.platform === 'win32' ? 'mpv.exe' : 'mpv'
+  return IS_PRODUCTION
+    ? path.join(process.resourcesPath, 'mpv', exe)
+    : path.join(ROOT_PATH, 'vendor', 'mpv', exe)
+}
+
+function getTempPath () {
+  // The portable build keeps everything, temp files included, inside its own
+  // "Portable Settings" folder so it leaves nothing behind on the machine
+  if (IS_PORTABLE) return path.join(PORTABLE_PATH, 'Temp')
+  return path.join(getProgramPath(), 'Temp')
 }
 
 function getDefaultDownloadPath () {
