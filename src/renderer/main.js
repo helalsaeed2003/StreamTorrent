@@ -262,6 +262,8 @@ const dispatchHandlers = {
   toggleTorrent: (infoHash) => controllers.torrentList().toggleTorrent(infoHash),
   pauseAllTorrents: () => controllers.torrentList().pauseAllTorrents(),
   resumeAllTorrents: () => controllers.torrentList().resumeAllTorrents(),
+  togglePreloadFile: (infoHash, index) =>
+    controllers.torrentList().togglePreloadFile(infoHash, index),
   toggleTorrentFile: (infoHash, index) =>
     controllers.torrentList().toggleTorrentFile(infoHash, index),
   confirmDeleteTorrent: (infoHash, deleteData) =>

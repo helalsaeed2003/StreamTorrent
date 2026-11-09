@@ -327,16 +327,28 @@ module.exports = class PlaybackController {
     // what it already fetched, so going back to it is instant.
     if (previous && previous.infoHash !== infoHash) {
       const previousSummary = TorrentSummary.getByKey(state, previous.infoHash)
+      const previousPreloads = state.preloads.get(previous.infoHash)
       if (previousSummary && previousSummary.files) {
-        previousSummary.selections = previousSummary.files.map(() => false)
-        previousSummary.status = 'paused'
+        // Anything the user asked for ahead of time keeps downloading
+        previousSummary.selections = previousSummary.files.map(
+          (file, i) => !!previousPreloads && previousPreloads.has(i))
+        if (!previousSummary.selections.some(Boolean)) {
+          previousSummary.status = 'paused'
+        }
       }
-      ipcRenderer.send('wt-stop-downloading', previous.infoHash)
+      if (!previousPreloads || previousPreloads.size === 0) {
+        ipcRenderer.send('wt-stop-downloading', previous.infoHash)
+      } else {
+        ipcRenderer.send('wt-select-files', previous.infoHash,
+          previousSummary.selections)
+      }
     }
 
     // Selecting just this file is also what stops the previous file in the same
     // torrent from downloading any further
-    torrentSummary.selections = torrentSummary.files.map((file, i) => i === index)
+    const preloads = state.preloads.get(infoHash)
+    torrentSummary.selections = torrentSummary.files.map(
+      (file, i) => i === index || (!!preloads && preloads.has(i)))
     state.streaming = { infoHash, fileIndex: index }
 
     // A torrent that is asleep picks the selections up when it is started, by

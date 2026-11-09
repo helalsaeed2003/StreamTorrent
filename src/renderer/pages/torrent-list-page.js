@@ -7,7 +7,7 @@ const TorrentSummary = require('../lib/torrent-summary')
 const TorrentPlayer = require('../lib/torrent-player')
 const FileTree = require('../lib/file-tree')
 const PlaybackPosition = require('../lib/playback-position')
-const { dispatcher } = require('../lib/dispatcher')
+const { dispatch, dispatcher } = require('../lib/dispatcher')
 const { calculateEta, formatPosition } = require('../lib/time')
 
 module.exports = class TorrentList extends React.Component {
@@ -391,6 +391,10 @@ module.exports = class TorrentList extends React.Component {
       state.lastPlayed.infoHash === infoHash &&
       state.lastPlayed.fileIndex === index
 
+    // Did the user ask for this file ahead of watching it?
+    const preloads = state.preloads.get(infoHash)
+    const isPreloading = !!preloads && preloads.has(index)
+
     // Where the user got to in this video last time
     const hasPosition = PlaybackPosition.hasProgress(file) && !PlaybackPosition.isFinished(file)
     const watched = PlaybackPosition.isWatched(file)
@@ -442,10 +446,15 @@ module.exports = class TorrentList extends React.Component {
           {hasPosition ? this.renderWatchProgress(file) : null}
         </td>
         <td className={'col-progress ' + rowClass}>
-          {isStreaming ? progress : ''}
+          {isStreaming || isPreloading ? progress : ''}
         </td>
         <td className={'col-size ' + rowClass}>
           {prettyBytes(file.length)}
+        </td>
+        <td className='col-preload'>
+          {isPlayable
+            ? this.renderPreloadButton(infoHash, index, isPreloading, isDone, progress)
+            : null}
         </td>
         <td className='col-select'>
           {watched
@@ -453,6 +462,38 @@ module.exports = class TorrentList extends React.Component {
             : null}
         </td>
       </tr>
+    )
+  }
+
+  /**
+   * The cloud button on a file row: fetch this video now, so it is ready to
+   * watch later, without opening the player. Clicking it again stops.
+   */
+  renderPreloadButton (infoHash, index, isPreloading, isDone, progress) {
+    const done = isPreloading && isDone
+
+    let title
+    if (done) title = 'Downloaded, ready to play'
+    else if (isPreloading) title = 'Downloading ' + progress + ', click to stop'
+    else title = 'Download this file now, without playing it'
+
+    const classes = ['icon', 'preload']
+    if (isPreloading) classes.push('active')
+    if (done) classes.push('done')
+
+    return (
+      <i
+        className={classes.join(' ')}
+        title={title}
+        role='button'
+        aria-label={title}
+        onClick={(e) => {
+          e.stopPropagation()
+          dispatch('togglePreloadFile', infoHash, index)
+        }}
+      >
+        {done ? 'cloud_done' : 'cloud_download'}
+      </i>
     )
   }
 

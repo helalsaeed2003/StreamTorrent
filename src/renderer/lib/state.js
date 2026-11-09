@@ -69,6 +69,12 @@ function getDefaultState () {
     tempUsage: null, /* {bytes, path} for the Preferences screen */
     /* infoHashes of torrents kept awake while a poster frame is taken */
     postersInFlight: new Set(),
+    /*
+     * Files the user asked for ahead of watching them: a Map of infoHash to
+     * a Set of file indexes. It is not saved, because the files themselves
+     * are thrown away when the app quits.
+     */
+    preloads: new Map(),
 
     /*
      * Saved state is read from and written to a file every time the app runs.
@@ -258,6 +264,15 @@ async function load (cb) {
     if (typeof saved.prefs.tempPath !== 'string') saved.prefs.tempPath = ''
     if (!Array.isArray(saved.torrents)) saved.torrents = []
     if (!Array.isArray(saved.staleTempPaths)) saved.staleTempPaths = []
+
+    // Everything downloaded is deleted when the app quits, so nothing is
+    // wanted from a torrent until the user plays or preloads something.
+    // Without this, files chosen last time would start downloading again.
+    saved.torrents.forEach(torrent => {
+      if (Array.isArray(torrent.selections)) {
+        torrent.selections = torrent.selections.map(() => false)
+      }
+    })
 
     if (process.type === 'renderer') {
       // Perf optimization: Save require() calls in the main process

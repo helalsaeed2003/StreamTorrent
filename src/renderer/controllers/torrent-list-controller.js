@@ -222,6 +222,63 @@ module.exports = class TorrentListController {
     }
   }
 
+  /**
+   * The cloud button on a file: fetch it now, so it is ready to watch later,
+   * or stop fetching it if it was already asked for.
+   *
+   * What has been downloaded is still thrown away when the app quits, like
+   * everything else in the temp folder, so this lasts for the session.
+   */
+  togglePreloadFile (infoHash, index) {
+    const state = this.state
+    const torrentSummary = TorrentSummary.getByKey(state, infoHash)
+    if (!torrentSummary || !torrentSummary.files) return
+
+    const preloads = state.preloads.get(infoHash) || new Set()
+    if (preloads.has(index)) preloads.delete(index)
+    else preloads.add(index)
+
+    if (preloads.size > 0) state.preloads.set(infoHash, preloads)
+    else state.preloads.delete(infoHash)
+
+    this.applySelections(infoHash)
+  }
+
+  /**
+   * Works out which files of a torrent should be downloading - the one being
+   * watched, plus anything preloaded - and tells the WebTorrent process. A
+   * torrent nothing is wanted from goes back to sleep.
+   */
+  applySelections (infoHash) {
+    const state = this.state
+    const torrentSummary = TorrentSummary.getByKey(state, infoHash)
+    if (!torrentSummary || !torrentSummary.files) return
+
+    const preloads = state.preloads.get(infoHash) || new Set()
+    const streamingIndex = state.streaming && state.streaming.infoHash === infoHash
+      ? state.streaming.fileIndex
+      : -1
+
+    torrentSummary.selections = torrentSummary.files.map(
+      (file, i) => preloads.has(i) || i === streamingIndex)
+
+    if (torrentSummary.selections.some(Boolean)) {
+      if (torrentSummary.status === 'paused') {
+        // A sleeping torrent picks the selections up as it starts
+        this.startTorrentingSummary(torrentSummary.torrentKey)
+      } else {
+        ipcRenderer.send('wt-select-files', infoHash, torrentSummary.selections)
+      }
+      torrentSummary.status = 'downloading'
+    } else {
+      ipcRenderer.send('wt-select-files', infoHash, torrentSummary.selections)
+      dispatch('idleTorrent', infoHash)
+    }
+
+    dispatch('stateSave')
+    dispatch('update')
+  }
+
   // Right-clicking a file: clear where we got to, or change whether it counts
   // as watched
   openFileContextMenu (infoHash, index) {

@@ -110,6 +110,38 @@ module.exports = class TorrentController {
     dispatch('update')
   }
 
+  /**
+   * A file asked for ahead of time has arrived in full, so there is nothing
+   * left to fetch: let the torrent sleep again rather than sit connected to
+   * peers. What was downloaded stays until the app quits, so it still plays
+   * straight away.
+   */
+  idleFinishedPreloads () {
+    const state = this.state
+    if (state.preloads.size === 0) return
+
+    for (const [infoHash, indexes] of state.preloads) {
+      if (state.streaming && state.streaming.infoHash === infoHash) continue
+
+      const torrentSummary = TorrentSummary.getByKey(state, infoHash)
+      if (!torrentSummary || !torrentSummary.files) continue
+      if (torrentSummary.status === 'paused') continue
+
+      const files = torrentSummary.progress && torrentSummary.progress.files
+      if (!files) continue
+
+      const allHere = [...indexes].every(i => {
+        const file = files[i]
+        return file && file.numPieces > 0 && file.numPiecesPresent === file.numPieces
+      })
+      if (!allHere) continue
+
+      torrentSummary.selections = torrentSummary.files.map(() => false)
+      ipcRenderer.send('wt-select-files', infoHash, torrentSummary.selections)
+      dispatch('idleTorrent', infoHash)
+    }
+  }
+
   torrentProgress (progressInfo) {
     // Overall progress across all active torrents, 0 to 1, or -1 to hide the progress bar
     // Hide progress bar when client has no torrents, or progress is 100%
@@ -129,6 +161,8 @@ module.exports = class TorrentController {
       }
       torrentSummary.progress = p
     })
+
+    this.idleFinishedPreloads()
 
     // TODO: Find an efficient way to re-enable this line, which allows subtitle
     //       files which are completed after a video starts to play to be added

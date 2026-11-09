@@ -1354,3 +1354,36 @@ video::-webkit-media-text-track-container {
 .player.mpv-player .letterbox.mpv-video .media-stalled {
   margin: auto;
 }
+
+/*
+ * The cloud button on a file row: download this video now, ready to watch
+ * later, without opening the player
+ */
+.torrent-details td.col-preload {
+  width: 28px;
+  padding-right: 4px;
+  text-align: right;
+}
+
+.torrent-details td.col-preload .icon.preload {
+  font-size: 18px;
+  vertical-align: middle;
+  opacity: 0.45;
+  cursor: pointer;
+}
+
+.torrent-details td.col-preload .icon.preload:hover {
+  opacity: 1;
+}
+
+/* Being fetched right now */
+.torrent-details td.col-preload .icon.preload.active {
+  opacity: 1;
+  color: #ff4081;
+}
+
+/* Fetched: ready to play */
+.torrent-details td.col-preload .icon.preload.done {
+  opacity: 1;
+  color: #8bc34a;
+}
