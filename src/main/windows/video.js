@@ -59,6 +59,19 @@ function create () {
   // Nothing is ever loaded into it; mpv paints over the whole thing
   win.setMenuBarVisibility(false)
 
+  /**
+   * The window shows the video but takes no mouse input: every click, move
+   * and scroll goes straight through to the page underneath, as if the video
+   * were part of it.
+   *
+   * This matters because mpv, when it is drawing into a window we gave it,
+   * does not handle mouse input at all. Without this the picture would be a
+   * dead area: the controls could never be brought back once they hid
+   * themselves, clicking would not bring the app forward, and clicking the
+   * picture would not pause.
+   */
+  win.setIgnoreMouseEvents(true)
+
   watch(main)
   sync()
   win.showInactive()

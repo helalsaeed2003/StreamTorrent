@@ -41,7 +41,6 @@ let open_ = false
 // an earlier one can be told apart from the current one
 let session = 0
 let lastInsets = { top: -1, bottom: -1 }
-let lastMousePos = { x: -1, y: -1 }
 
 // Anything that arrives before the player page is ready would be about the
 // video we just closed, so it is ignored
@@ -127,18 +126,6 @@ function onProperty (name, value) {
       }
       return
 
-    // The video window covers the page, so moving the mouse over the picture
-    // never reaches the page itself. mpv tells us instead, which is what makes
-    // the controls come back after they have hidden themselves.
-    case 'mouse-pos': {
-      if (!value || typeof value.x !== 'number') return
-      if (value.x === lastMousePos.x && value.y === lastMousePos.y) return
-      lastMousePos = { x: value.x, y: value.y }
-      dispatch('mediaMouseMoved')
-      update()
-      return
-    }
-
     case 'track-list':
       applyTrackList(p, value)
       break
@@ -188,21 +175,9 @@ function onProperty (name, value) {
   update()
 }
 
-function onEvent (name, data) {
+function onEvent (name) {
   const p = playing()
   if (!p) return
-
-  if (name === 'client-message') {
-    const what = (data && data.args && data.args[0]) || ''
-    // A click on the picture plays or pauses, the same as clicking the video
-    // did before. A double click is deliberately ignored: it used to go
-    // full screen by accident.
-    if (what === 'st-click') {
-      p.mouseStationarySince = Date.now()
-      dispatch('playPause')
-    }
-    return
-  }
 
   if (name === 'file-loaded') {
     p.isReady = true
