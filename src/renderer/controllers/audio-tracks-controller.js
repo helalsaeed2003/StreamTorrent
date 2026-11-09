@@ -1,5 +1,6 @@
 const { dispatch } = require('../lib/dispatcher')
 const MpvPlayer = require('../lib/mpv-player')
+const { showContextMenu } = require('../lib/context-menu')
 
 module.exports = class AudioTracksController {
   constructor (state) {
@@ -27,12 +28,20 @@ module.exports = class AudioTracksController {
     dispatch('skip', 0.2) // HACK: hardcoded seek value for smooth audio change
   }
 
+  // The audio track menu, drawn by the system so it sits above the video
   toggleAudioTracksMenu () {
     const playing = this.state.playing
-    playing.audioTracks.showMenu = !playing.audioTracks.showMenu
-    if (playing.audioTracks.showMenu) {
-      playing.subtitles.showMenu = false
-      playing.showPlaybackRateMenu = false
-    }
+    const tracks = playing.audioTracks.tracks || []
+    playing.mouseStationarySince = new Date().getTime()
+
+    if (tracks.length === 0) return
+
+    showContextMenu(tracks.map((track, ix) => ({
+      label: track.label,
+      type: 'radio',
+      checked: playing.audioTracks.selectedIndex === ix,
+      action: 'selectAudioTrack',
+      args: [ix]
+    })))
   }
 }

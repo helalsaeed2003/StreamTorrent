@@ -61,14 +61,23 @@ function init () {
 
     const template = items.map(item => {
       if (item.type === 'separator') return { type: 'separator' }
-      return {
+
+      const entry = {
         label: String(item.label),
-        enabled: item.enabled !== false,
-        click: () => {
+        enabled: item.enabled !== false
+      }
+      if (item.type === 'radio' || item.type === 'checkbox') {
+        entry.type = item.type
+        entry.checked = !!item.checked
+      }
+      // An item with nothing to do is a heading
+      if (item.action) {
+        entry.click = () => {
           if (!chosenByHand()) return
           windows.main.dispatch(item.action, ...(item.args || []))
         }
       }
+      return entry
     })
 
     Menu.buildFromTemplate(template).popup({ window: win })

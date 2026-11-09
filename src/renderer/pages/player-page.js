@@ -793,107 +793,6 @@ function renderCastOptions (state) {
   )
 }
 
-/**
- * The subtitle menu: tracks inside the video, subtitle files sitting in the
- * torrent, one from the user's own machine, and the timing and size controls.
- */
-function renderSubtitleOptions (state) {
-  const subtitles = state.playing.subtitles
-  if (!subtitles.showMenu) return
-
-  const items = []
-
-  // Subtitles built into the video, plus any file already loaded
-  if (subtitles.tracks.length > 0) {
-    items.push(<li key='h-tracks' className='options-heading'>In this video</li>)
-    subtitles.tracks.forEach((track, ix) => {
-      const isSelected = subtitles.selectedIndex === ix
-      items.push(
-        <li key={'track-' + ix} onClick={dispatcher('selectSubtitle', ix)}>
-          <i className='icon'>{'radio_button_' + (isSelected ? 'checked' : 'unchecked')}</i>
-          {track.label}
-        </li>
-      )
-    })
-  }
-
-  // Subtitle files in the torrent. Choosing one downloads just that file.
-  const files = state.playing.subtitleFiles || []
-  if (files.length > 0) {
-    items.push(<li key='h-files' className='options-heading'>In this torrent</li>)
-    files.forEach((file) => {
-      const pending = state.playing.pendingSubtitle === file.index
-      items.push(
-        <li key={'file-' + file.index} onClick={dispatcher('selectTorrentSubtitle', file.index)}>
-          <i className='icon'>{pending ? 'hourglass_empty' : 'subtitles'}</i>
-          <span className='ellipsis'>{file.name}</span>
-        </li>
-      )
-    })
-  }
-
-  const noneSelected = subtitles.selectedIndex === -1
-  items.push(
-    <li key='none' onClick={dispatcher('selectSubtitle', -1)}>
-      <i className='icon'>{'radio_button_' + (noneSelected ? 'checked' : 'unchecked')}</i>
-      Off
-    </li>,
-    <li key='open' onClick={dispatcher('openSubtitles')}>
-      <i className='icon'>folder_open</i>
-      Load from my computer…
-    </li>,
-    <li key='h-adjust' className='options-heading'>Timing and size</li>,
-    <li key='delay' className='options-adjust'>
-      <span className='adjust-label'>
-        Delay {formatDelay(state.playing.subtitleDelay || 0)}
-      </span>
-      <i className='icon' title='Show earlier' onClick={dispatcher('changeSubtitleDelay', -1)}>remove</i>
-      <i className='icon' title='Show later' onClick={dispatcher('changeSubtitleDelay', 1)}>add</i>
-      <i className='icon' title='Reset timing' onClick={dispatcher('resetSubtitleDelay')}>restore</i>
-    </li>,
-    <li key='scale' className='options-adjust'>
-      <span className='adjust-label'>
-        Size {Math.round((state.playing.subtitleScale || 1) * 100)}%
-      </span>
-      <i className='icon' title='Smaller' onClick={dispatcher('changeSubtitleScale', -1)}>remove</i>
-      <i className='icon' title='Bigger' onClick={dispatcher('changeSubtitleScale', 1)}>add</i>
-    </li>
-  )
-
-  return (
-    <ul key='subtitle-options' className='options-list subtitle-options'>
-      {items}
-    </ul>
-  )
-}
-
-// "+0.4s" / "-1.2s" / "0s"
-function formatDelay (delay) {
-  if (!delay) return '0s'
-  return (delay > 0 ? '+' : '') + delay.toFixed(1) + 's'
-}
-
-function renderAudioTrackOptions (state) {
-  const audioTracks = state.playing.audioTracks
-  if (!audioTracks.tracks.length || !audioTracks.showMenu) return
-
-  const items = audioTracks.tracks.map((track, ix) => {
-    const isSelected = state.playing.audioTracks.selectedIndex === ix
-    return (
-      <li key={ix} onClick={dispatcher('selectAudioTrack', ix)}>
-        <i className='icon'>{'radio_button_' + (isSelected ? 'checked' : 'unchecked')}</i>
-        {track.label}
-      </li>
-    )
-  })
-
-  return (
-    <ul key='audio-track-options' className='options-list'>
-      {items}
-    </ul>
-  )
-}
-
 function renderPlayerControls (state) {
   const positionPercent = 100 * state.playing.currentTime / state.playing.duration
   const playbackCursorStyle = { left: 'calc(' + positionPercent + '% - 3px)' }
@@ -1166,9 +1065,6 @@ function renderPlayerControls (state) {
     >
       {elements}
       {renderCastOptions(state)}
-      {renderSubtitleOptions(state)}
-      {renderAudioTrackOptions(state)}
-      {renderPlaybackRateOptions(state)}
     </div>
   )
 }
@@ -1176,26 +1072,6 @@ function renderPlayerControls (state) {
 // "1x", "1.25x", "0.5x" - what the speed button shows
 function formatPlaybackRate (rate) {
   return rate + 'x'
-}
-
-function renderPlaybackRateOptions (state) {
-  if (!state.playing.showPlaybackRateMenu) return
-
-  const items = config.PLAYBACK_RATES.map((rate) => {
-    const isSelected = state.playing.playbackRate === rate
-    return (
-      <li key={rate} onClick={dispatcher('setPlaybackRate', rate)}>
-        <i className='icon'>{'radio_button_' + (isSelected ? 'checked' : 'unchecked')}</i>
-        {formatPlaybackRate(rate)}
-      </li>
-    )
-  })
-
-  return (
-    <ul key='playback-rate-options' className='options-list playback-rate-options'>
-      {items}
-    </ul>
-  )
 }
 
 function renderPreview (state) {
@@ -1219,7 +1095,7 @@ function renderPreview (state) {
     <div
       key='preview' className='scrub-preview' style={{
         position: 'absolute',
-        bottom: 50,
+        bottom: config.UI_PLAYER_CONTROLS_HEIGHT,
         left: xPos,
         width,
         display: previewXCoord == null && 'none' // Hide preview when XCoord unset
@@ -1227,7 +1103,12 @@ function renderPreview (state) {
     >
       <p
         style={{
-          textAlign: 'center', margin: 5, textShadow: '0 0 2px rgba(0,0,0,.5)', color: '#eee'
+          textAlign: 'center',
+          margin: 0,
+          lineHeight: config.UI_PLAYER_PREVIEW_HEIGHT + 'px',
+          fontSize: 13,
+          textShadow: '0 0 2px rgba(0,0,0,.5)',
+          color: '#eee'
         }}
       >
         {Number.isFinite(time) ? formatTime(time, state.playing.duration) : ''}

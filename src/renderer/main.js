@@ -333,9 +333,11 @@ const dispatchHandlers = {
   toggleSubtitlesMenu: () => controllers.subtitles().toggleSubtitlesMenu(),
   checkForSubtitles: () => controllers.subtitles().checkForSubtitles(),
   addSubtitles: (files, autoSelect) => controllers.subtitles().addSubtitles(files, autoSelect),
-  changeSubtitleDelay: (dir) => controllers.subtitles().changeSubtitleDelay(dir),
-  resetSubtitleDelay: () => controllers.subtitles().resetSubtitleDelay(),
-  changeSubtitleScale: (dir) => controllers.subtitles().changeSubtitleScale(dir),
+  changeSubtitleDelay: (dir, reopen) =>
+    controllers.subtitles().changeSubtitleDelay(dir, reopen),
+  resetSubtitleDelay: (reopen) => controllers.subtitles().resetSubtitleDelay(reopen),
+  changeSubtitleScale: (dir, reopen) =>
+    controllers.subtitles().changeSubtitleScale(dir, reopen),
 
   // Audio Tracks
   selectAudioTrack: (index) => controllers.audioTracks().selectAudioTrack(index),

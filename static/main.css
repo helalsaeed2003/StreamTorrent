@@ -681,13 +681,14 @@ body.drag .app::after {
 
 .player .controls .playback-cursor {
   position: absolute;
+  /* Centred on the 5px bar, which runs from -5px to 0 */
   top: -5px;
   background-color: #FFF;
   width: 5px;
   height: 5px;
   border-radius: 50%;
   margin-top: 0;
-  margin-left: 0;
+  margin-left: -2.5px;
   transition-property: width, height, top, margin-left;
   transition-duration: 0.1s;
   transition-timing-function: ease-out;
@@ -717,8 +718,9 @@ body.drag .app::after {
 }
 
 .player .playback-bar:hover .playback-cursor {
-  top: -10px;
-  margin-left: -6px;
+  /* The bar is 7px tall while hovered, so its middle sits 3.5px up */
+  top: -11.5px;
+  margin-left: -8px;
   width: 16px;
   height: 16px;
 }

@@ -114,7 +114,12 @@ module.exports = {
   // plus the 14px of the seek bar that sticks out above it (see
   // ".player .controls .scrub-bar" in static/main.css). The video window is
   // kept clear of this strip, so the seek bar can be seen and grabbed.
-  UI_PLAYER_CONTROLS_HEIGHT: UI_HEADER_HEIGHT + 14
+  UI_PLAYER_CONTROLS_HEIGHT: UI_HEADER_HEIGHT + 14,
+
+  // How much room is kept above the seek bar for the time that appears while
+  // scrubbing. It is always kept free, so the picture does not resize when the
+  // pointer touches the bar.
+  UI_PLAYER_PREVIEW_HEIGHT: 22
 }
 
 function getConfigPath () {
