@@ -14,3 +14,6 @@ Temp/
 # Bundled mpv video engine (121 MB binary). Downloaded, not kept in git.
 # Put mpv.exe and d3dcompiler_43.dll in vendor/mpv/ before running bin/package.js.
 vendor/
+
+# One-off repair script from testing, kept locally, not part of the app
+cleanup-webtorrent-config.js
