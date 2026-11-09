@@ -1250,13 +1250,15 @@ video::-webkit-media-text-track-container {
 .player .resume-note {
   position: absolute;
   left: 20px;
-  bottom: 60px;
+  /* In the strip kept free above the controls: the video is drawn in a
+     window of its own and would cover anything laid over it */
+  bottom: 54px;
   display: flex;
   align-items: center;
   background: rgba(40, 40, 40, 0.9);
   color: #eee;
   border-radius: 4px;
-  padding: 8px 10px;
+  padding: 6px 10px;
   font-size: 13px;
   animation: fadein 0.3s;
   z-index: 1;

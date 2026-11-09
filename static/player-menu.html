@@ -135,8 +135,9 @@
 
     .chips {
       display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
+      flex-wrap: nowrap;
+      justify-content: space-between;
+      gap: 4px;
       padding: 2px 14px 10px;
     }
 
@@ -215,7 +216,6 @@
 
     // Speeds offered as one-tap buttons, as well as on the slider
     const SPEED_CHIPS = [0.5, 1, 1.25, 1.5, 2, 3]
-    const SIZE_CHIPS = [75, 100, 125, 150, 200]
 
     ipcRenderer.on('player-menu-data', (e, data) => render(data))
 
@@ -282,6 +282,7 @@
       if (data.kind === 'speed') renderSpeed(data)
       else if (data.kind === 'subtitles') renderSubtitles(data)
       else if (data.kind === 'audio') renderAudio(data)
+      else if (data.kind === 'cast') renderCast(data)
       measure()
     }
 
@@ -302,7 +303,7 @@
       panel.appendChild(row)
 
       panel.appendChild(chips(SPEED_CHIPS, rate,
-        value => (value === 1 ? 'Normal' : value + 'x'), setRate))
+        value => value + 'x', setRate))
 
       function setRate (value) {
         const clamped = Math.round(Math.max(0.25, Math.min(4, value)) * 100) / 100
@@ -315,7 +316,7 @@
       const files = data.files || []
 
       if (tracks.length > 0) {
-        panel.appendChild(heading('In this video'))
+        panel.appendChild(heading('Built into the video'))
         tracks.forEach((track, ix) => {
           panel.appendChild(pick(track.label, data.selectedIndex === ix,
             () => act('selectSubtitle', ix)))
@@ -323,7 +324,7 @@
       }
 
       if (files.length > 0) {
-        panel.appendChild(heading('In this torrent'))
+        panel.appendChild(heading('Subtitle files'))
         files.forEach(file => {
           panel.appendChild(pick(file.name, false,
             () => act('selectTorrentSubtitle', file.index),
@@ -374,8 +375,6 @@
       sizeRow.appendChild(bigger)
       panel.appendChild(sizeRow)
 
-      panel.appendChild(chips(SIZE_CHIPS, scale, value => value + '%', setScale))
-
       function setScale (value) {
         const clamped = Math.max(50, Math.min(300, Math.round(value)))
         act('setSubtitleScale', clamped / 100)
@@ -388,6 +387,14 @@
       tracks.forEach((track, ix) => {
         panel.appendChild(pick(track.label, data.selectedIndex === ix,
           () => act('selectAudioTrack', ix)))
+      })
+    }
+
+    function renderCast (data) {
+      panel.appendChild(heading('Play on'))
+      ;(data.devices || []).forEach((device, ix) => {
+        panel.appendChild(pick(device.label, device.selected,
+          () => act('selectCastDevice', ix)))
       })
     }
 

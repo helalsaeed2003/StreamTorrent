@@ -768,31 +768,6 @@ function renderCastScreen (state) {
   )
 }
 
-function renderCastOptions (state) {
-  if (!state.devices.castMenu) return
-
-  const { location, devices } = state.devices.castMenu
-  const player = state.devices[location]
-
-  const items = devices.map((device, ix) => {
-    const isSelected = player.device === device
-    const name = device.name
-    return (
-      <li key={ix} onClick={dispatcher('selectCastDevice', ix)}>
-        <i className='icon'>{isSelected ? 'radio_button_checked' : 'radio_button_unchecked'}</i>
-        {' '}
-        {name}
-      </li>
-    )
-  })
-
-  return (
-    <ul key='cast-options' className='options-list'>
-      {items}
-    </ul>
-  )
-}
-
 function renderPlayerControls (state) {
   const positionPercent = 100 * state.playing.currentTime / state.playing.duration
   const playbackCursorStyle = { left: 'calc(' + positionPercent + '% - 3px)' }
@@ -830,16 +805,6 @@ function renderPlayerControls (state) {
         onDrag={handleScrub}
       />
     </div>,
-
-    <i
-      key='back'
-      className='icon back float-left'
-      onClick={dispatcher('backToList')}
-      role='button'
-      aria-label='Back to the list'
-    >
-      chevron_left
-    </i>,
 
     <i
       key='skip-previous'
@@ -1074,7 +1039,6 @@ function renderPlayerControls (state) {
       onMouseLeave={dispatcher('mediaControlsMouseLeave')}
     >
       {elements}
-      {renderCastOptions(state)}
     </div>
   )
 }

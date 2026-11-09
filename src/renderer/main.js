@@ -451,6 +451,13 @@ function setupIpc () {
   ipcRenderer.on('wt-file-modtimes', (e, ...args) => tc.torrentFileModtimes(...args))
   ipcRenderer.on('wt-file-saved', (e, ...args) => tc.torrentFileSaved(...args))
   ipcRenderer.on('wt-poster', (e, ...args) => tc.torrentPosterSaved(...args))
+
+  // The player's menu window closed itself, because the app lost focus
+  ipcRenderer.on('player-menu-closed', () => {
+    if (!state.playing.openMenu) return
+    state.playing.openMenu = null
+    update()
+  })
   ipcRenderer.on('wt-audio-metadata', (e, ...args) => tc.torrentAudioMetadata(...args))
   ipcRenderer.on('wt-server-running', (e, ...args) => tc.torrentServerRunning(...args))
   ipcRenderer.on('wt-file-ready', (e, ...args) =>

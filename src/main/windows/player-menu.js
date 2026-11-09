@@ -55,12 +55,11 @@ function create () {
     maximizable: false,
     fullscreenable: false,
     skipTaskbar: true,
-    transparent: true,
     hasShadow: false,
+    backgroundColor: '#202020',
     // Never take focus: the keyboard stays with the main window, so the app's
     // hotkeys keep working while the menu is up
     focusable: false,
-    backgroundColor: '#00000000',
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -87,6 +86,13 @@ function watch (main) {
 
   main.on('minimize', hide)
   main.on('hide', hide)
+
+  // Looking at something else puts the menu away, as a menu should
+  main.on('blur', () => {
+    if (!open) return
+    hide()
+    main.webContents.send('player-menu-closed')
+  })
 }
 
 function show (payload) {
@@ -100,7 +106,10 @@ function show (payload) {
 
   sync()
   if (!win.isVisible()) win.showInactive()
-  win.setAlwaysOnTop(true, 'floating')
+
+  // Above the video, which is a window of its own, but not above anything
+  // outside the app
+  win.moveTop()
 }
 
 function hide () {

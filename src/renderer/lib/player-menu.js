@@ -32,6 +32,21 @@ function payloadFor (state) {
   if (state.location.url() !== 'player') return null
 
   const playing = state.playing
+
+  // Picking something to cast to, which the page used to draw over the video
+  const castMenu = state.devices.castMenu
+  if (castMenu) {
+    const player = state.devices[castMenu.location]
+    return {
+      kind: 'cast',
+      location: castMenu.location,
+      devices: castMenu.devices.map((device, ix) => ({
+        label: device.name,
+        selected: player && player.device === device
+      }))
+    }
+  }
+
   switch (playing.openMenu) {
     case 'speed':
       return {

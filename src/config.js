@@ -119,7 +119,7 @@ module.exports = {
   // How much room is kept above the seek bar for the time that appears while
   // scrubbing. It is always kept free, so the picture does not resize when the
   // pointer touches the bar.
-  UI_PLAYER_PREVIEW_HEIGHT: 22
+  UI_PLAYER_PREVIEW_HEIGHT: 36
 }
 
 function getConfigPath () {
