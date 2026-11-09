@@ -21,6 +21,10 @@ const config = require('../../config')
 const log = require('../log')
 const menu = require('../menu')
 
+// How soon after the menu appears a choice is taken to be the menu picking an
+// item by itself rather than the user choosing one, in milliseconds
+const MENU_SETTLE_MS = 300
+
 function init (state, options) {
   if (main.win) {
     return main.win.show()
@@ -63,12 +67,19 @@ function init (state, options) {
    */
   win.webContents.on('context-menu', (e, params) => {
     const text = clipboard.readText().trim()
+
+    // Opening the menu can pick its first item by itself, from the release of
+    // the very button that asked for the menu. Anything chosen in the moment
+    // right after it appears therefore did not come from the user.
+    const openedAt = Date.now()
+    const chosenByHand = () => Date.now() - openedAt > MENU_SETTLE_MS
+
     const template = params.isEditable
       ? [{ role: 'cut' }, { role: 'copy' }, { role: 'paste' }]
       : [{
-          label: 'Paste torrent',
+          label: 'Paste',
           enabled: text !== '',
-          click: () => dispatch('addTorrent', text)
+          click: () => { if (chosenByHand()) dispatch('addTorrent', text) }
         }]
 
     Menu.buildFromTemplate(template).popup({ window: win, x: params.x, y: params.y })
