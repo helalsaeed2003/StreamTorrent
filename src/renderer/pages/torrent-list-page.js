@@ -112,9 +112,16 @@ module.exports = class TorrentList extends React.Component {
 
     // If it's downloading/seeding then show progress info
     const prog = torrentSummary.progress
+    // A torrent is woken up briefly to take a thumbnail from it. That is
+    // not the user downloading anything, so say what is really going on
+    // rather than show a download in progress.
+    const makingPoster = this.props.state.postersInFlight
+      .has(torrentSummary.infoHash)
     let progElems
     if (torrentSummary.error) {
       progElems = [getErrorMessage(torrentSummary)]
+    } else if (makingPoster) {
+      progElems = [<span key='torrent-status'>Making a thumbnail</span>]
     } else if (torrentSummary.status !== 'paused' && prog) {
       progElems = [
         renderTorrentStatus(),

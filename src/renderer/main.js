@@ -268,7 +268,11 @@ const dispatchHandlers = {
     controllers.torrentList().confirmDeleteTorrent(infoHash, deleteData),
   deleteTorrent: (infoHash, deleteData) =>
     controllers.torrentList().deleteTorrent(infoHash, deleteData),
-  openTorrentListContextMenu: () => onPaste(),
+  openTorrentListContextMenu: () =>
+    controllers.torrentList().openTorrentListContextMenu(),
+  showTorrentInFolder: (infoHash) =>
+    controllers.torrentList().showTorrentInFolder(infoHash),
+  copyToClipboard: (text) => electron.clipboard.writeText(text),
   confirmDeleteAllTorrents: (deleteData) =>
     controllers.torrentList().confirmDeleteAllTorrents(deleteData),
   deleteAllTorrents: (deleteData) =>

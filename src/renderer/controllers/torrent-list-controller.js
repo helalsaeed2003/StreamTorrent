@@ -7,6 +7,7 @@ const { dispatch } = require('../lib/dispatcher')
 const { TorrentKeyNotFoundError } = require('../lib/errors')
 const sound = require('../lib/sound')
 const TorrentSummary = require('../lib/torrent-summary')
+const { showContextMenu } = require('../lib/context-menu')
 const FileTree = require('../lib/file-tree')
 const PlaybackPosition = require('../lib/playback-position')
 const { formatPosition } = require('../lib/time')
@@ -229,21 +230,18 @@ module.exports = class TorrentListController {
     const file = torrentSummary.files[index]
     if (!file) return
 
-    const menu = new remote.Menu()
-
-    if (PlaybackPosition.hasProgress(file)) {
-      menu.append(new remote.MenuItem({
+    showContextMenu([
+      PlaybackPosition.hasProgress(file) && {
         label: `Clear progress (${formatPosition(file.currentTime)})`,
-        click: () => dispatch('clearFileProgress', infoHash, index)
-      }))
-    }
-
-    menu.append(new remote.MenuItem({
-      label: PlaybackPosition.isWatched(file) ? 'Mark as unwatched' : 'Mark as watched',
-      click: () => dispatch('toggleFileWatched', infoHash, index)
-    }))
-
-    menu.popup({ window: remote.getCurrentWindow() })
+        action: 'clearFileProgress',
+        args: [infoHash, index]
+      },
+      {
+        label: PlaybackPosition.isWatched(file) ? 'Mark as unwatched' : 'Mark as watched',
+        action: 'toggleFileWatched',
+        args: [infoHash, index]
+      }
+    ])
   }
 
   clearFileProgress (infoHash, index) {
@@ -357,75 +355,82 @@ module.exports = class TorrentListController {
     }
   }
 
+  // Right-clicking the list itself: offer whatever is on the clipboard, which
+  // is how a magnet link is added with the mouse alone
+  openTorrentListContextMenu () {
+    const text = clipboard.readText().trim()
+
+    showContextMenu([{
+      label: 'Paste',
+      enabled: text !== '',
+      action: 'addTorrent',
+      args: [text]
+    }])
+  }
+
   openTorrentContextMenu (infoHash) {
     const torrentSummary = TorrentSummary.getByKey(this.state, infoHash)
-    const menu = new remote.Menu()
-
-    menu.append(new remote.MenuItem({
-      label: 'Remove From List',
-      click: () => dispatch('confirmDeleteTorrent', torrentSummary.infoHash, false)
-    }))
-
-    menu.append(new remote.MenuItem({
-      label: 'Remove Data File',
-      click: () => dispatch('confirmDeleteTorrent', torrentSummary.infoHash, true)
-    }))
-
-    menu.append(new remote.MenuItem({
-      type: 'separator'
-    }))
-
-    if (torrentSummary.files) {
-      menu.append(new remote.MenuItem({
-        label: process.platform === 'darwin' ? 'Show in Finder' : 'Show in Folder',
-        click: () => showItemInFolder(torrentSummary)
-      }))
-      menu.append(new remote.MenuItem({
-        type: 'separator'
-      }))
-    }
-
-    menu.append(new remote.MenuItem({
-      label: 'Copy Magnet Link to Clipboard',
-      click: () => clipboard.writeText(torrentSummary.magnetURI)
-    }))
-
-    menu.append(new remote.MenuItem({
-      label: 'Copy Instant.io Link to Clipboard',
-      click: () => clipboard.writeText(`https://instant.io/#${torrentSummary.infoHash}`)
-    }))
-
-    menu.append(new remote.MenuItem({
-      label: 'Save Torrent File As...',
-      click: () => dispatch('saveTorrentFileAs', torrentSummary.torrentKey),
-      enabled: torrentSummary.torrentFileName != null
-    }))
-
-    menu.append(new remote.MenuItem({
-      type: 'separator'
-    }))
-
-    if (torrentSummary.files) {
-      menu.append(new remote.MenuItem({
-        label: 'Expand All Folders',
-        click: () => dispatch('setAllFoldersExpanded', torrentSummary.infoHash, true)
-      }))
-      menu.append(new remote.MenuItem({
-        label: 'Collapse All Folders',
-        click: () => dispatch('setAllFoldersExpanded', torrentSummary.infoHash, false)
-      }))
-      menu.append(new remote.MenuItem({
-        type: 'separator'
-      }))
-    }
-
     const sortedByName = this.state.saved.prefs.sortByName
-    menu.append(new remote.MenuItem({
-      label: `${sortedByName ? '✓ ' : ''}Sort by Name`,
-      click: () => dispatch('updatePreferences', 'sortByName', !sortedByName)
-    }))
 
-    menu.popup({ window: remote.getCurrentWindow() })
+    showContextMenu([
+      {
+        label: 'Remove From List',
+        action: 'confirmDeleteTorrent',
+        args: [torrentSummary.infoHash, false]
+      },
+      {
+        label: 'Remove Data File',
+        action: 'confirmDeleteTorrent',
+        args: [torrentSummary.infoHash, true]
+      },
+      { type: 'separator' },
+      torrentSummary.files && {
+        label: process.platform === 'darwin' ? 'Show in Finder' : 'Show in Folder',
+        action: 'showTorrentInFolder',
+        args: [torrentSummary.infoHash]
+      },
+      torrentSummary.files && { type: 'separator' },
+      {
+        label: 'Copy Magnet Link to Clipboard',
+        action: 'copyToClipboard',
+        args: [torrentSummary.magnetURI]
+      },
+      {
+        label: 'Copy Instant.io Link to Clipboard',
+        action: 'copyToClipboard',
+        args: [`https://instant.io/#${torrentSummary.infoHash}`]
+      },
+      {
+        label: 'Save Torrent File As...',
+        enabled: torrentSummary.torrentFileName != null,
+        action: 'saveTorrentFileAs',
+        args: [torrentSummary.torrentKey]
+      },
+      { type: 'separator' },
+      torrentSummary.files && {
+        label: 'Expand All Folders',
+        action: 'setAllFoldersExpanded',
+        args: [torrentSummary.infoHash, true]
+      },
+      torrentSummary.files && {
+        label: 'Collapse All Folders',
+        action: 'setAllFoldersExpanded',
+        args: [torrentSummary.infoHash, false]
+      },
+      torrentSummary.files && { type: 'separator' },
+      {
+        label: `${sortedByName ? '✓ ' : ''}Sort by Name`,
+        action: 'updatePreferences',
+        args: ['sortByName', !sortedByName]
+      }
+    ])
+  }
+
+  // Opens the folder the torrent's files are in
+  showTorrentInFolder (infoHash) {
+    const torrentSummary = TorrentSummary.getByKey(this.state, infoHash)
+    if (!torrentSummary) return
+    showItemInFolder(torrentSummary)
   }
 
   // Takes a torrentSummary or torrentKey

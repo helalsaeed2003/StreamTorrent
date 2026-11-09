@@ -3,7 +3,11 @@ module.exports = {
   setModule
 }
 
-const { app, ipcMain } = require('electron')
+const { app, ipcMain, Menu } = require('electron')
+
+// How soon after a right-click menu appears a choice is taken to be the menu
+// picking an item by itself rather than the user choosing one, in milliseconds
+const MENU_SETTLE_MS = 300
 
 const log = require('./log')
 const menu = require('./menu')
@@ -34,6 +38,40 @@ function init () {
       windows.webtorrent.send(message.name, ...message.args)
       log('webtorrent: sent queued %s', message.name)
     })
+  })
+
+  /**
+   * Right-click menus
+   *
+   * The page says what should be in the menu and the menu is built here. A menu
+   * popped up from the page is closed again by the very click that asked for
+   * it, and can pick its first item on the way out.
+   */
+
+  ipcMain.on('show-context-menu', (e, items) => {
+    if (!Array.isArray(items) || items.length === 0) return
+    const win = windows.main.win
+    if (!win || win.isDestroyed()) return
+
+    // Opening the menu can pick an item by itself, from the release of the
+    // button that asked for the menu, so anything chosen in the moment right
+    // after it appears did not come from the user
+    const openedAt = Date.now()
+    const chosenByHand = () => Date.now() - openedAt > MENU_SETTLE_MS
+
+    const template = items.map(item => {
+      if (item.type === 'separator') return { type: 'separator' }
+      return {
+        label: String(item.label),
+        enabled: item.enabled !== false,
+        click: () => {
+          if (!chosenByHand()) return
+          windows.main.dispatch(item.action, ...(item.args || []))
+        }
+      }
+    })
+
+    Menu.buildFromTemplate(template).popup({ window: win })
   })
 
   /**

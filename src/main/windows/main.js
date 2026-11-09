@@ -14,16 +14,12 @@ const main = module.exports = {
   win: null
 }
 
-const { app, BrowserWindow, Menu, clipboard, screen } = require('electron')
+const { app, BrowserWindow, screen } = require('electron')
 const debounce = require('debounce')
 
 const config = require('../../config')
 const log = require('../log')
 const menu = require('../menu')
-
-// How soon after the menu appears a choice is taken to be the menu picking an
-// item by itself rather than the user choosing one, in milliseconds
-const MENU_SETTLE_MS = 300
 
 function init (state, options) {
   if (main.win) {
@@ -55,35 +51,6 @@ function init (state, options) {
     y: initialBounds.y
   })
   require('@electron/remote/main').enable(win.webContents)
-
-  /**
-   * The right-click menu. It is built here rather than in the page because a
-   * menu popped up from the page is closed again by the very click that asked
-   * for it.
-   *
-   * In a text box it is the usual Cut, Copy and Paste. Anywhere else it is a
-   * single Paste, which adds whatever torrent or magnet link is on the
-   * clipboard, the same as Ctrl+V does.
-   */
-  win.webContents.on('context-menu', (e, params) => {
-    const text = clipboard.readText().trim()
-
-    // Opening the menu can pick its first item by itself, from the release of
-    // the very button that asked for the menu. Anything chosen in the moment
-    // right after it appears therefore did not come from the user.
-    const openedAt = Date.now()
-    const chosenByHand = () => Date.now() - openedAt > MENU_SETTLE_MS
-
-    const template = params.isEditable
-      ? [{ role: 'cut' }, { role: 'copy' }, { role: 'paste' }]
-      : [{
-          label: 'Paste',
-          enabled: text !== '',
-          click: () => { if (chosenByHand()) dispatch('addTorrent', text) }
-        }]
-
-    Menu.buildFromTemplate(template).popup({ window: win, x: params.x, y: params.y })
-  })
 
   win.loadURL(config.WINDOW_MAIN)
 
