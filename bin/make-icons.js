@@ -8,6 +8,10 @@
  * tweaked by editing the numbers below and re-running:
  *
  *   node bin/make-icons.js
+ *
+ * NOTE: the app icon it draws is NOT the one in use. static/StreamTorrent.ico
+ * and .png now hold the icon the user picked instead, which running this would
+ * overwrite. Only the .torrent file icon still comes from here.
  */
 
 const fs = require('fs')

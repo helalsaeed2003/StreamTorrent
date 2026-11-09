@@ -1,7 +1,7 @@
 {
   "name": "streamtorrent",
   "description": "StreamTorrent - browse and preview torrent files without downloading everything. Based on WebTorrent Desktop.",
-  "version": "0.87.3",
+  "version": "0.87.4",
   "author": {
     "name": "WebTorrent, LLC",
     "email": "feross@webtorrent.io",
