@@ -1,7 +1,6 @@
 const React = require('react')
 const prettyBytes = require('prettier-bytes')
 
-const Checkbox = require('material-ui/Checkbox').default
 const LinearProgress = require('material-ui/LinearProgress').default
 
 const TorrentSummary = require('../lib/torrent-summary')
@@ -44,17 +43,6 @@ module.exports = class TorrentList extends React.Component {
     const state = this.props.state
 
     const contents = []
-    if (state.downloadPathStatus === 'missing') {
-      contents.push(
-        <div key='torrent-missing-path'>
-          <p>Download path missing: {state.saved.prefs.downloadPath}</p>
-          <p>Check that all drives are connected?</p>
-          <p>Alternatively, choose a new download path
-            in <a href='#' onClick={dispatcher('preferences')}>Preferences</a>
-          </p>
-        </div>
-      )
-    }
     const continueWatching = this.renderContinueWatching()
     if (continueWatching) contents.push(continueWatching)
 
@@ -129,7 +117,6 @@ module.exports = class TorrentList extends React.Component {
       progElems = [getErrorMessage(torrentSummary)]
     } else if (torrentSummary.status !== 'paused' && prog) {
       progElems = [
-        renderDownloadCheckbox(),
         renderTorrentStatus(),
         renderProgressBar(),
         renderPercentProgress(),
@@ -140,7 +127,6 @@ module.exports = class TorrentList extends React.Component {
       ]
     } else {
       progElems = [
-        renderDownloadCheckbox(),
         renderTorrentStatus()
       ]
     }
@@ -151,28 +137,6 @@ module.exports = class TorrentList extends React.Component {
     )
 
     return (<div key='metadata' className='metadata'>{elements}</div>)
-
-    function renderDownloadCheckbox () {
-      const infoHash = torrentSummary.infoHash
-      const isActive = ['downloading', 'seeding'].includes(torrentSummary.status)
-      return (
-        <Checkbox
-          key='download-button'
-          className={'control download ' + torrentSummary.status}
-          style={{
-            display: 'inline-block',
-            width: 32
-          }}
-          iconStyle={{
-            width: 20,
-            height: 20
-          }}
-          checked={isActive}
-          onClick={stopPropagation}
-          onCheck={dispatcher('toggleTorrent', infoHash)}
-        />
-      )
-    }
 
     function renderProgressBar () {
       const progress = Math.floor(100 * prog.progress)
@@ -237,9 +201,10 @@ module.exports = class TorrentList extends React.Component {
     function renderTorrentStatus () {
       let status
       if (torrentSummary.status === 'paused') {
-        if (!torrentSummary.progress) status = ''
-        else if (torrentSummary.progress.progress === 1) status = 'Not seeding'
-        else status = 'Paused'
+        // A torrent nothing is being played from is simply idle. There is no
+        // longer a button to start or stop one, so there is nothing for a
+        // "Paused" label to mean.
+        status = ''
       } else if (torrentSummary.status === 'downloading') {
         if (!torrentSummary.progress) status = ''
         else if (!torrentSummary.progress.ready) status = 'Verifying'
@@ -553,10 +518,6 @@ module.exports = class TorrentList extends React.Component {
 // How far a row at this depth in the folder tree is indented, in pixels
 function indentFor (depth) {
   return depth * 18
-}
-
-function stopPropagation (e) {
-  e.stopPropagation()
 }
 
 function getErrorMessage (torrentSummary) {

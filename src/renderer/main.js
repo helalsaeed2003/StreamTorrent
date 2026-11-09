@@ -27,7 +27,6 @@ const electron = require('electron')
 // undefined and reading it threw on startup and whenever a video loaded.
 // The rest of the app already uses @electron/remote; use it here too.
 const remote = require('@electron/remote')
-const fs = require('fs')
 const React = require('react')
 const ReactDOM = require('react-dom')
 
@@ -197,9 +196,6 @@ function delayedInit () {
   // for extended periods of time
   setInterval(() => telemetry.send(state), 12 * 3600 * 1000)
 
-  // Warn if the download dir is gone, eg b/c an external drive is unplugged
-  checkDownloadPath()
-
   // ...window visibility state.
   document.addEventListener('webkitvisibilitychange', onVisibilityChange)
   onVisibilityChange()
@@ -362,7 +358,6 @@ const dispatchHandlers = {
   refreshTempUsage: () => controllers.prefs().refreshTempUsage(),
   clearTempNow: () => controllers.prefs().clearTempNow(),
   stopDownloading: () => controllers.playback().stopDownloading(),
-  checkDownloadPath,
   updateGlobalTrackers: (trackers) => setGlobalTrackers(trackers),
   startFolderWatcher: () => controllers.folderWatcher().start(),
   stopFolderWatcher: () => controllers.folderWatcher().stop(),
@@ -371,12 +366,12 @@ const dispatchHandlers = {
   updateAvailable: (version) => controllers.update().updateAvailable(version),
   skipVersion: (version) => controllers.update().skipVersion(version),
 
-  // Navigation between screens (back, forward, ESC, etc)
+  // Navigation between screens (back, ESC, etc). There is no forward: the
+  // only way back is out of a video or out of Preferences.
   exitModal: () => { state.modal = null },
   backToList,
   escapeBack,
   back: () => state.location.back(),
-  forward: () => state.location.forward(),
   cancel: () => state.location.cancel(),
 
   // Controlling the window
@@ -670,15 +665,4 @@ function onWindowBoundsChanged (e, newBounds) {
     state.saved.bounds = newBounds
     dispatch('stateSave')
   }
-}
-
-function checkDownloadPath () {
-  fs.stat(state.saved.prefs.downloadPath, (err, stat) => {
-    if (err) {
-      state.downloadPathStatus = 'missing'
-      return console.error(err)
-    }
-    if (stat.isDirectory()) state.downloadPathStatus = 'ok'
-    else state.downloadPathStatus = 'missing'
-  })
 }

@@ -410,16 +410,9 @@ function getMenuTemplate () {
         click: () => windows.main.dispatch('preferences')
       })
 
-    // Help menu (Windows, Linux)
-    template[5].submenu.push(
-      {
-        type: 'separator'
-      },
-      {
-        label: 'About ' + config.APP_NAME,
-        click: () => windows.about.init()
-      }
-    )
+    // The Help menu already has its "About" entry. Upstream added a second
+    // one here because its own Help menu was full of website links, which
+    // this build does not have.
   }
   // Add "File > Quit" menu item so Linux distros where the system tray icon is
   // missing will have a way to quit the app.

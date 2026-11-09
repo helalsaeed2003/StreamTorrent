@@ -37,7 +37,6 @@ module.exports = class PrefsController {
 
     this.state.saved.prefs[property] = value
     dispatch('stateSaveImmediate')
-    dispatch('checkDownloadPath')
   }
 
   /**

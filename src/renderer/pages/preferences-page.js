@@ -18,9 +18,6 @@ class PreferencesPage extends React.Component {
   constructor (props) {
     super(props)
 
-    this.handleDownloadPathChange =
-      this.handleDownloadPathChange.bind(this)
-
     this.handleStartupChange =
       this.handleStartupChange.bind(this)
 
@@ -39,26 +36,6 @@ class PreferencesPage extends React.Component {
     this.state = {
       globalTrackers
     }
-  }
-
-  downloadPathSelector () {
-    return (
-      <Preference>
-        <PathSelector
-          dialog={{
-            title: 'Select download directory',
-            properties: ['openDirectory']
-          }}
-          onChange={this.handleDownloadPathChange}
-          title='Download location'
-          value={this.props.state.saved.prefs.downloadPath}
-        />
-      </Preference>
-    )
-  }
-
-  handleDownloadPathChange (filePath) {
-    dispatch('updatePreferences', 'downloadPath', filePath)
   }
 
   highestPlaybackPriorityCheckbox () {
@@ -298,7 +275,6 @@ class PreferencesPage extends React.Component {
     return (
       <div style={style}>
         <PreferencesSection title='Folders'>
-          {this.downloadPathSelector()}
           {this.tempPathSelector()}
           {this.autoAddTorrentsCheckbox()}
           {this.torrentsFolderPathSelector()}

@@ -4,7 +4,6 @@ const { dispatcher } = require('../lib/dispatcher')
 
 class Header extends React.Component {
   render () {
-    const loc = this.props.state.location
     return (
       <div
         className='header'
@@ -15,31 +14,32 @@ class Header extends React.Component {
       >
         {this.getTitle()}
         <div className='nav left float-left'>
-          <i
-            className={'icon back ' + (loc.hasBack() ? '' : 'disabled')}
-            title='Back'
-            onClick={dispatcher('back')}
-            role='button'
-            aria-disabled={!loc.hasBack()}
-            aria-label='Back'
-          >
-            chevron_left
-          </i>
-          <i
-            className={'icon forward ' + (loc.hasForward() ? '' : 'disabled')}
-            title='Forward'
-            onClick={dispatcher('forward')}
-            role='button'
-            aria-disabled={!loc.hasForward()}
-            aria-label='Forward'
-          >
-            chevron_right
-          </i>
+          {this.getBackButton()}
         </div>
         <div className='nav right float-right'>
           {this.getAddButton()}
         </div>
       </div>
+    )
+  }
+
+  /**
+   * The only way back is out of a video, so the arrow is only there while one
+   * is playing, and it always goes to the torrent list. There is no forward
+   * arrow: there is nowhere forward to go.
+   */
+  getBackButton () {
+    if (this.props.state.location.url() !== 'player') return null
+    return (
+      <i
+        className='icon back'
+        title='Back to the list'
+        onClick={dispatcher('backToList')}
+        role='button'
+        aria-label='Back to the list'
+      >
+        chevron_left
+      </i>
     )
   }
 
