@@ -533,7 +533,7 @@ body.drag .app::after {
 }
 
 .torrent-details td.col-select {
-  width: 45px;
+  width: 37px;
   padding-right: 13px;
   text-align: right;
 }
@@ -1361,8 +1361,10 @@ video::-webkit-media-text-track-container {
  * comes down.
  */
 .torrent-details td.col-preload {
-  width: 30px;
-  padding-right: 4px;
+  /* Sized so the cloud sits the same distance from the file size on its
+     left as from the watched tick on its right */
+  width: 38px;
+  padding-right: 3px;
   text-align: right;
 }
 
