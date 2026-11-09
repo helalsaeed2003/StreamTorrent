@@ -197,8 +197,18 @@ function init () {
    * Video engine (mpv), drawing inside the main window
    */
 
+  // Opening and closing the video engine are queued one after another. Closing
+  // it takes a moment (mpv has to let go of the file), and playing another
+  // video right away must not start a second mpv on top of the one still
+  // shutting down.
+  let videoQueue = Promise.resolve()
+  const queueVideo = work => {
+    videoQueue = videoQueue.then(work, work)
+    return videoQueue
+  }
+
   // Open the video surface and start mpv attached to it
-  ipcMain.on('mpv-open', async (e, insets) => {
+  ipcMain.on('mpv-open', (e, insets, session) => queueVideo(async () => {
     const mpv = require('./mpv')
     const video = windows.video
 
@@ -211,11 +221,11 @@ function init () {
 
     try {
       await mpv.start({ wid })
-      windows.main.send('mpv-ready')
+      windows.main.send('mpv-ready', session)
     } catch (err) {
       windows.main.send('mpv-error', err.message)
     }
-  })
+  }))
 
   // The controls showed or hid, so the video area changed shape
   ipcMain.on('mpv-set-insets', (e, insets) => {
@@ -240,12 +250,14 @@ function init () {
     windows.main.send('mpv-property-reply', replyId, value)
   })
 
-  // Close the player: stop mpv and take the video surface away
-  ipcMain.on('mpv-close', async () => {
+  // Close the player: stop mpv and take the video surface away. The session
+  // number goes back with the reply, so a player that has already been opened
+  // again ignores the news that the previous one finished closing.
+  ipcMain.on('mpv-close', (e, session) => queueVideo(async () => {
     await require('./mpv').stop()
     windows.video.destroy()
-    windows.main.send('mpv-closed')
-  })
+    windows.main.send('mpv-closed', session)
+  }))
 
   /**
    * External Media Player

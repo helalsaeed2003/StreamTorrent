@@ -37,6 +37,11 @@ const END_OF_VIDEO_SECONDS = 5
 let state = null
 let update = () => {}
 let open_ = false
+// Counts how many times the player has been opened, so that a late reply about
+// an earlier one can be told apart from the current one
+let session = 0
+let lastInsets = { top: -1, bottom: -1 }
+let lastMousePos = { x: -1, y: -1 }
 
 // Anything that arrives before the player page is ready would be about the
 // video we just closed, so it is ignored
@@ -52,10 +57,14 @@ function init (_state, _update) {
   state = _state
   update = _update || (() => {})
 
-  ipcRenderer.on('mpv-ready', () => {
+  ipcRenderer.on('mpv-ready', (e, readySession) => {
+    if (readySession !== undefined && readySession !== session) return
     const p = playing()
     if (!p) return
     p.mpvReady = true
+    // The controls may have shown or hidden while mpv was starting, so make
+    // sure the video window is the shape the page expects
+    updateInsets(state)
     dispatch('mpvReady')
   })
 
@@ -64,7 +73,12 @@ function init (_state, _update) {
     dispatch('error', message)
   })
 
-  ipcRenderer.on('mpv-closed', () => {
+  // Closing takes a moment. If another video was started in the meantime this
+  // news is about the previous player, and acting on it would leave the app
+  // thinking the video engine is shut when it is in fact playing - which stops
+  // the video window being resized around the controls.
+  ipcRenderer.on('mpv-closed', (e, closedSession) => {
+    if (closedSession !== undefined && closedSession !== session) return
     open_ = false
   })
 
@@ -112,6 +126,18 @@ function onProperty (name, value) {
         }
       }
       return
+
+    // The video window covers the page, so moving the mouse over the picture
+    // never reaches the page itself. mpv tells us instead, which is what makes
+    // the controls come back after they have hidden themselves.
+    case 'mouse-pos': {
+      if (!value || typeof value.x !== 'number') return
+      if (value.x === lastMousePos.x && value.y === lastMousePos.y) return
+      lastMousePos = { x: value.x, y: value.y }
+      dispatch('mediaMouseMoved')
+      update()
+      return
+    }
 
     case 'track-list':
       applyTrackList(p, value)
@@ -162,9 +188,21 @@ function onProperty (name, value) {
   update()
 }
 
-function onEvent (name) {
+function onEvent (name, data) {
   const p = playing()
   if (!p) return
+
+  if (name === 'client-message') {
+    const what = (data && data.args && data.args[0]) || ''
+    // A click on the picture plays or pauses, the same as clicking the video
+    // did before. A double click is deliberately ignored: it used to go
+    // full screen by accident.
+    if (what === 'st-click') {
+      p.mouseStationarySince = Date.now()
+      dispatch('playPause')
+    }
+    return
+  }
 
   if (name === 'file-loaded') {
     p.isReady = true
@@ -236,23 +274,37 @@ function insetsFor (state) {
   const hidden = state.shouldHidePlayerControls()
   return hidden
     ? { top: 0, bottom: 0 }
-    : { top: config.UI_HEADER_HEIGHT, bottom: config.UI_HEADER_HEIGHT }
+    : { top: config.UI_HEADER_HEIGHT, bottom: config.UI_PLAYER_CONTROLS_HEIGHT }
 }
 
 function open (state) {
   open_ = true
-  ipcRenderer.send('mpv-open', insetsFor(state))
+  session++
+  lastInsets = insetsFor(state)
+  ipcRenderer.send('mpv-open', lastInsets, session)
 }
 
+/**
+ * Tells the video window what shape to be, whenever that has changed.
+ *
+ * Safe to call as often as we like: it only sends something when the answer
+ * is different from last time. It has to work that way, because the one event
+ * that says "the controls just appeared" is consumed by whoever notices it
+ * first, and the video window must be resized either way.
+ */
 function updateInsets (state) {
   if (!open_) return
-  ipcRenderer.send('mpv-set-insets', insetsFor(state))
+  const insets = insetsFor(state)
+  if (insets.top === lastInsets.top && insets.bottom === lastInsets.bottom) return
+  lastInsets = insets
+  ipcRenderer.send('mpv-set-insets', insets)
 }
 
 function close () {
   if (!open_) return
   open_ = false
-  ipcRenderer.send('mpv-close')
+  lastInsets = { top: -1, bottom: -1 }
+  ipcRenderer.send('mpv-close', session)
 }
 
 function load (url, options) {

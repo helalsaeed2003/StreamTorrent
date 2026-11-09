@@ -222,11 +222,13 @@ function lazyLoadCast () {
 // 3. dispatch - the event handler calls dispatch(), main.js sends it to a controller
 // 4. controller - the controller handles the event, changing the state object
 function update () {
-  const controlsChanged = controllers.playback().showOrHidePlayerControls()
+  controllers.playback().showOrHidePlayerControls()
 
   // The video area grows and shrinks as the controls hide and show, and mpv
-  // draws in a window of its own, so it has to be told
-  if (controlsChanged) MpvPlayer.updateInsets(state)
+  // draws in a window of its own, so it has to be told. This is checked every
+  // time round rather than only when the controls change, because dispatch()
+  // consumes that change before this point when the mouse is what moved.
+  MpvPlayer.updateInsets(state)
 
   // React drops the ref if a render throws, and update() runs on a timer, so
   // without this one bad render would leave the app throwing here every second

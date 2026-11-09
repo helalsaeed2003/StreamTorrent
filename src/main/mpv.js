@@ -47,7 +47,11 @@ const OBSERVED = [
   [13, 'demuxer-cache-time'],
   [14, 'width'],
   [15, 'height'],
-  [16, 'seeking']
+  [16, 'seeking'],
+  // Where the mouse is inside the video. The video window sits on top of the
+  // page, so this is the only way the app hears about the mouse while the
+  // pointer is over the picture: it is what brings the hidden controls back.
+  [17, 'mouse-pos']
 ]
 
 let proc = null
@@ -95,8 +99,13 @@ function start ({ wid }) {
     // We draw our own controls, so mpv shows none of its own
     '--no-osc',
     '--osd-level=0',
-    '--no-input-cursor',
     '--cursor-autohide=no',
+
+    // mpv does watch the mouse, but only so it can tell us where the pointer
+    // is and when it is clicked. Those are forwarded to the app, which brings
+    // its controls back and plays or pauses. mpv itself acts on neither,
+    // because its own default bindings are off.
+    '--input-cursor=yes',
 
     // Keyboard stays with the app, so the app's own hotkeys keep working
     '--input-vo-keyboard=no',
@@ -135,6 +144,12 @@ function start ({ wid }) {
     .then(() => {
       starting = null
       OBSERVED.forEach(([id, name]) => command(['observe_property', id, name]))
+
+      // Clicking the picture should play or pause and bring the app forward,
+      // the same as clicking it did when the video was an HTML element. mpv
+      // sends these back as client-message events.
+      command(['keybind', 'MBTN_LEFT', 'script-message st-click'])
+      command(['keybind', 'MBTN_LEFT_DBL', 'script-message st-double-click'])
     })
     .catch(err => {
       starting = null
@@ -196,6 +211,10 @@ function onData (chunk) {
     if (message.event === 'property-change') {
       send('mpv-property', message.name, message.data)
     } else if (message.event) {
+      // A click on the video is a click on the app. The video window never
+      // takes focus itself, so without this the window stays in the
+      // background and only its title bar can bring it forward.
+      if (message.event === 'client-message') focusMainWindow()
       send('mpv-event', message.event, message)
     }
   }
@@ -294,5 +313,13 @@ function cleanup () {
 function send (channel, ...args) {
   try {
     windows.main.send(channel, ...args)
+  } catch (err) {}
+}
+
+// Brings StreamTorrent forward, as clicking any part of it should
+function focusMainWindow () {
+  try {
+    const win = windows.main.win
+    if (win && !win.isDestroyed() && !win.isFocused()) win.focus()
   } catch (err) {}
 }
