@@ -25,6 +25,18 @@ let argv = sliceArgv(process.argv)
 // allow electron/chromium to play startup sounds (without user interaction)
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 
+/**
+ * Draw the interface without the graphics card.
+ *
+ * Chromium's GPU process crashes here with STATUS_STACK_BUFFER_OVERRUN
+ * (exit code -1073740791), several times over, the first time anything heavy
+ * is drawn: opening Preferences or the remove-torrent question would flash the
+ * window black until Chromium gave up and fell back to software drawing on its
+ * own. Starting that way costs nothing, since the interface is a few pages of
+ * HTML and the video is drawn by mpv in a window of its own.
+ */
+app.disableHardwareAcceleration()
+
 // Start the app without showing the main window when auto launching on login
 // (On Windows and Linux, we get a flag. On MacOS, we get special API.)
 const hidden = argv.includes('--hidden') ||
