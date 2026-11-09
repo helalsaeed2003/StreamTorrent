@@ -12,7 +12,6 @@ const prettyBytes = require('prettier-bytes')
 
 const { dispatch } = require('../lib/dispatcher')
 const config = require('../../config')
-const tempPathLib = require('../../temp-path')
 
 class PreferencesPage extends React.Component {
   constructor (props) {
@@ -114,17 +113,17 @@ class PreferencesPage extends React.Component {
     if (isFileHandler) {
       return (
         <Preference>
-          <p>WebTorrent is your default torrent app. Hooray!</p>
+          <p>{config.APP_NAME} is your default torrent app. Hooray!</p>
         </Preference>
       )
     }
     return (
       <Preference>
-        <p>WebTorrent is not currently the default torrent app.</p>
+        <p>{config.APP_NAME} is not currently the default torrent app.</p>
         <RaisedButton
           className='control'
           onClick={this.handleSetDefaultApp}
-          label='Make WebTorrent the default'
+          label={'Make ' + config.APP_NAME + ' the default'}
         />
       </Preference>
     )
@@ -144,7 +143,7 @@ class PreferencesPage extends React.Component {
         <Checkbox
           className='control'
           checked={this.props.state.saved.prefs.startup}
-          label='Open WebTorrent on startup'
+          label={'Open ' + config.APP_NAME + ' on startup'}
           onCheck={this.handleStartupChange}
         />
       </Preference>
@@ -233,10 +232,7 @@ class PreferencesPage extends React.Component {
           value={isDefault ? inUse + '  (default)' : prefs.tempPath}
         />
         <div style={noteStyle}>
-          A folder named “{tempPathLib.DEDICATED_FOLDER_NAME}” is used inside whichever
-          folder you pick, and only files inside it are ever deleted.
-          <br />
-          Currently using <strong>{prettyBytes(usage.bytes || 0)}</strong> in {inUse}
+          Using <strong>{prettyBytes(usage.bytes || 0)}</strong>. Cleared when the app quits.
         </div>
         <RaisedButton
           className='control'

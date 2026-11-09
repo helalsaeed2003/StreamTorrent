@@ -4,6 +4,10 @@ const TorrentSummary = require('../lib/torrent-summary')
 const sound = require('../lib/sound')
 const { dispatch } = require('../lib/dispatcher')
 
+// How many times to try making a poster for one torrent before leaving it
+// without one. A try can fail because the torrent has no peers yet.
+const MAX_POSTER_ATTEMPTS = 3
+
 module.exports = class TorrentController {
   constructor (state) {
     this.state = state
@@ -74,6 +78,16 @@ module.exports = class TorrentController {
     }
     dispatch('update')
 
+    // Take a poster frame, unless this torrent already has one or has failed
+    // to give one up too many times. This does download part of the video, a
+    // few megabytes, but only once: the image is kept from then on, and the
+    // torrent goes back to sleep as soon as the frame has been taken.
+    if (!torrentSummary.posterFileName &&
+        (torrentSummary.posterAttempts || 0) < MAX_POSTER_ATTEMPTS) {
+      this.state.postersInFlight.add(torrentSummary.infoHash)
+      ipcRenderer.send('wt-generate-torrent-poster', torrentKey)
+    }
+
     // Save the .torrent file, if it hasn't been saved already. This is what
     // lets the file list stay browsable while the torrent itself is idle.
     if (!torrentSummary.torrentFileName) {
@@ -83,10 +97,6 @@ module.exports = class TorrentController {
       // put it back to sleep rather than leave it connected to peers
       dispatch('idleTorrent', torrentSummary.infoHash)
     }
-
-    // Note: poster images are deliberately not generated. Making one means
-    // downloading part of a video or image file, and nothing is downloaded
-    // unless the user asks for it by playing it.
   }
 
   torrentDone (torrentKey, torrentInfo) {
@@ -144,10 +154,19 @@ module.exports = class TorrentController {
     dispatch('idleTorrent', torrentSummary.infoHash)
   }
 
+  // Called when a poster has been made, and also when making one failed, in
+  // which case posterFileName is null
   torrentPosterSaved (torrentKey, posterFileName) {
     const torrentSummary = this.getTorrentSummary(torrentKey)
-    torrentSummary.posterFileName = posterFileName
+    if (!torrentSummary) return
+    torrentSummary.posterAttempts = (torrentSummary.posterAttempts || 0) + 1
+    if (posterFileName) torrentSummary.posterFileName = posterFileName
+    this.state.postersInFlight.delete(torrentSummary.infoHash)
     dispatch('stateSave')
+    dispatch('update')
+
+    // The torrent was only kept awake to take the frame
+    dispatch('idleTorrent', torrentSummary.infoHash)
   }
 
   torrentAudioMetadata (infoHash, index, info) {

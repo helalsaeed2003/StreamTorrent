@@ -289,15 +289,23 @@ function saveTorrentFile (torrentKey) {
 // Auto chooses either a frame from a video file, an image, etc
 function generateTorrentPoster (torrentKey) {
   const torrent = getTorrent(torrentKey)
+
+  // The main window keeps the torrent awake until it hears back, so it is
+  // told either way, with no file name when there is no poster to show
+  const failed = (message, err) => {
+    console.log(message, err)
+    ipcRenderer.send('wt-poster', torrentKey, null)
+  }
+
   torrentPoster(torrent, (err, buf, extension) => {
-    if (err) return console.log('error generating poster: %o', err)
+    if (err) return failed('error generating poster: %o', err)
     // save it for next time
     fs.mkdir(config.POSTER_PATH, { recursive: true }, err => {
-      if (err) return console.log('error creating poster dir: %o', err)
+      if (err) return failed('error creating poster dir: %o', err)
       const posterFileName = torrent.infoHash + extension
       const posterFilePath = path.join(config.POSTER_PATH, posterFileName)
       fs.writeFile(posterFilePath, buf, err => {
-        if (err) return console.log('error saving poster: %o', err)
+        if (err) return failed('error saving poster: %o', err)
         // show the poster
         ipcRenderer.send('wt-poster', torrentKey, posterFileName)
       })

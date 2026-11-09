@@ -67,6 +67,8 @@ function getDefaultState () {
     streaming: null, /* {infoHash, fileIndex} of the file being downloaded now */
     tempPath: null, /* the temp folder actually in use, once checked */
     tempUsage: null, /* {bytes, path} for the Preferences screen */
+    /* infoHashes of torrents kept awake while a poster frame is taken */
+    postersInFlight: new Set(),
 
     /*
      * Saved state is read from and written to a file every time the app runs.

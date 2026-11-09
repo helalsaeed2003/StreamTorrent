@@ -24,12 +24,12 @@ class Header extends React.Component {
   }
 
   /**
-   * The only way back is out of a video, so the arrow is only there while one
-   * is playing, and it always goes to the torrent list. There is no forward
-   * arrow: there is nowhere forward to go.
+   * The arrow shows on every screen except the torrent list, and always goes
+   * back to that list. There is no forward arrow: there is nowhere forward
+   * to go.
    */
   getBackButton () {
-    if (this.props.state.location.url() !== 'player') return null
+    if (this.props.state.location.url() === 'home') return null
     return (
       <i
         className='icon back'

@@ -143,6 +143,15 @@ function getTempPath () {
   // The portable build keeps everything, temp files included, inside its own
   // "Portable Settings" folder so it leaves nothing behind on the machine
   if (IS_PORTABLE) return path.join(PORTABLE_PATH, 'Temp')
+
+  // The installed app lives in a folder named after its version, which
+  // changes with every update, so temp files go beside it instead:
+  // LocalAppData\StreamTorrent\Temp. The same folder is then used from one
+  // version to the next.
+  if (process.platform === 'win32' && process.env.LOCALAPPDATA) {
+    return path.join(process.env.LOCALAPPDATA, APP_NAME, 'Temp')
+  }
+
   return path.join(getProgramPath(), 'Temp')
 }
 

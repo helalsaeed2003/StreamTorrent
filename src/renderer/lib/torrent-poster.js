@@ -1,11 +1,27 @@
 module.exports = torrentPoster
 
-const captureFrame = require('capture-frame')
+const { spawn } = require('child_process')
+const fs = require('fs')
+const os = require('os')
 const path = require('path')
 
+const config = require('../../config')
 const mediaExtensions = require('./media-extensions')
 
 const msgNoSuitablePoster = 'Cannot generate a poster from any files in the torrent'
+
+// How long to wait for mpv to produce a frame before giving up, in milliseconds
+const POSTER_TIMEOUT = 90 * 1000
+
+// How wide the saved poster is, in pixels. The list draws it at about half
+// this, so it stays sharp on a high-DPI screen.
+const POSTER_WIDTH = 640
+
+// How far into the video the frame is taken from, in seconds. Far enough in
+// to be past black frames and logos, near enough that only a few megabytes
+// have to be downloaded to reach it. If the video is shorter than this, the
+// first frame is used instead.
+const POSTER_POSITION = '60'
 
 function torrentPoster (torrent, cb) {
   // First, try to use a poster image if available
@@ -126,48 +142,103 @@ function torrentPosterFromAudio (torrent, cb) {
   bestCover.file.getBuffer((err, buf) => cb(err, buf, extname))
 }
 
+/**
+ * Grabs a frame from the largest video in the torrent, using the bundled mpv
+ * rather than a <video> tag. mpv opens everything the player can open,
+ * including HEVC and 10-bit MKVs that Chromium cannot decode, so a poster is
+ * made for the same files the app can actually play.
+ *
+ * Only the pieces up to the chosen moment are downloaded, and only once: the
+ * JPEG is kept in the poster folder from then on. The moment is measured in
+ * seconds rather than as a fraction of the video, so the cost does not grow
+ * with the size of the file.
+ */
 function torrentPosterFromVideo (torrent, cb) {
   const file = getLargestFileByExtension(torrent, mediaExtensions.video)
-
   const index = torrent.files.indexOf(file)
+
+  let dir = null
+  let child = null
+  let timer = null
+  let finished = false
 
   const server = torrent.createServer(0)
   server.listen(0, onListening)
 
+  function finish (err, buf) {
+    if (finished) return
+    finished = true
+    clearTimeout(timer)
+    if (child) child.kill()
+    try {
+      server.destroy()
+    } catch (e) {
+      // The torrent may already have taken the server down with it
+    }
+    if (dir) fs.rm(dir, { recursive: true, force: true }, () => {})
+    if (err) return cb(err)
+    cb(null, buf, '.jpg')
+  }
+
   function onListening () {
     const port = server.address().port
-    const url = 'http://localhost:' + port + '/' + index
-    const video = document.createElement('video')
-    video.addEventListener('canplay', onCanPlay)
+    const url = 'http://localhost:' + port + '/' + index + '/' +
+      encodeURIComponent(file.name)
 
-    video.volume = 0
-    video.src = url
-    video.play()
-
-    function onCanPlay () {
-      video.removeEventListener('canplay', onCanPlay)
-      video.addEventListener('seeked', onSeeked)
-
-      video.currentTime = Math.min((video.duration || 600) * 0.03, 60)
+    try {
+      dir = fs.mkdtempSync(path.join(os.tmpdir(), 'streamtorrent-poster-'))
+    } catch (err) {
+      return finish(err)
     }
 
-    function onSeeked () {
-      video.removeEventListener('seeked', onSeeked)
+    timer = setTimeout(() => finish(new Error('Timed out making a poster')),
+      POSTER_TIMEOUT)
 
-      const frame = captureFrame(video)
-      const buf = frame && frame.image
+    grab(url, POSTER_POSITION, (err, buf) => {
+      if (!err) return finish(null, buf)
+      // Nothing there: the video may be shorter than that, so settle for the
+      // very first frame
+      grab(url, '0', (err, buf) => {
+        if (err) return finish(err)
+        finish(null, buf)
+      })
+    })
+  }
 
-      // unload video element
-      video.pause()
-      video.src = ''
-      video.load()
+  // Runs mpv once, writing a single frame to a JPEG, and reads it back
+  function grab (url, start, done) {
+    if (finished) return
+    const out = path.join(dir, 'poster-' + start + '.jpg')
 
-      server.destroy()
+    child = spawn(config.MPV_PATH, [
+      '--no-config',
+      '--no-terminal',
+      '--msg-level=all=no',
+      // Nothing is played: one frame is decoded and written out
+      '--no-audio',
+      '--no-sub',
+      '--frames=1',
+      '--start=' + start,
+      // Decode in software. The frame has to come back to main memory to be
+      // encoded, and not every machine can copy it back from the GPU.
+      '--hwdec=no',
+      '--vf=scale=' + POSTER_WIDTH + ':-2',
+      // Video is usually limited-range, which the JPEG encoder refuses to take
+      // unless it is told not to insist on the standard
+      '--ovcopts=strict=-1',
+      '--o=' + out,
+      url
+    ], { windowsHide: true })
 
-      if (buf.length === 0) return cb(new Error(msgNoSuitablePoster))
-
-      cb(null, buf, '.jpg')
-    }
+    child.on('error', err => done(err))
+    child.on('exit', () => {
+      fs.readFile(out, (err, buf) => {
+        if (err || !buf || buf.length === 0) {
+          return done(new Error(msgNoSuitablePoster))
+        }
+        done(null, buf)
+      })
+    })
   }
 }
 

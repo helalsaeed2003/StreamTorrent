@@ -67,6 +67,9 @@ module.exports = class TorrentListController {
     // Somebody explicitly asked for a file in this torrent
     if (torrentSummary.selections && torrentSummary.selections.some(Boolean)) return
 
+    // A poster frame is being taken from this torrent right now
+    if (state.postersInFlight.has(torrentSummary.infoHash)) return
+
     console.log('idling torrent %s: no files selected', torrentSummary.infoHash)
     torrentSummary.status = 'paused'
     // Nothing has been downloaded yet, so disconnect entirely rather than sit
