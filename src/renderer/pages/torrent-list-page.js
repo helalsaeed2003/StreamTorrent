@@ -112,17 +112,26 @@ module.exports = class TorrentList extends React.Component {
 
     // If it's downloading/seeding then show progress info
     const prog = torrentSummary.progress
-    // A torrent is woken up briefly to take a thumbnail from it. That is
-    // not the user downloading anything, so say what is really going on
-    // rather than show a download in progress.
+
+    // A torrent is woken up when it is added, to read its file list, and again
+    // briefly to take a thumbnail from it. Neither is the user downloading
+    // anything, so say what is really going on instead of showing a download
+    // that is not happening, and show the peers it has found either way.
     const makingPoster = this.props.state.postersInFlight
       .has(torrentSummary.infoHash)
+    const hasFileList = !!(torrentSummary.files && torrentSummary.files.length)
+
     let progElems
     if (torrentSummary.error) {
       progElems = [getErrorMessage(torrentSummary)]
-    } else if (makingPoster) {
-      progElems = [<span key='torrent-status'>Making a thumbnail</span>]
-    } else if (torrentSummary.status !== 'paused' && prog) {
+    } else if (torrentSummary.status === 'paused' || !prog) {
+      progElems = [renderTorrentStatus()]
+    } else if (makingPoster || !hasFileList) {
+      progElems = [
+        <span key='torrent-status'>{renderWaitingFor()}</span>,
+        renderPeers()
+      ]
+    } else {
       progElems = [
         renderTorrentStatus(),
         renderProgressBar(),
@@ -132,10 +141,6 @@ module.exports = class TorrentList extends React.Component {
         renderSpeeds(),
         renderEta()
       ]
-    } else {
-      progElems = [
-        renderTorrentStatus()
-      ]
     }
     elements.push(
       <div key='progress-info' className='ellipsis'>
@@ -144,6 +149,13 @@ module.exports = class TorrentList extends React.Component {
     )
 
     return (<div key='metadata' className='metadata'>{elements}</div>)
+
+    // What a torrent that is awake but not downloading for the user is up to
+    function renderWaitingFor () {
+      if (makingPoster) return 'Making a thumbnail'
+      if (!prog.numPeers) return 'Connecting to peers'
+      return 'Getting the file list'
+    }
 
     function renderProgressBar () {
       const progress = Math.floor(100 * prog.progress)
