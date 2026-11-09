@@ -244,12 +244,27 @@ function indexOfTrack (tracks, id) {
 
 // --- commands ------------------------------------------------------------
 
+// Anything the page draws on top of the video: the speed, subtitle and audio
+// menus, and the time shown while scrubbing. The video window is a window of
+// its own, drawn over the page, so it has to be kept clear of them.
+const OVER_VIDEO = '.player .controls .options-list, .player .scrub-preview'
+
 function insetsFor (state) {
   // When the controls hide themselves the video takes the whole window
   const hidden = state.shouldHidePlayerControls()
-  return hidden
-    ? { top: 0, bottom: 0 }
-    : { top: config.UI_HEADER_HEIGHT, bottom: config.UI_PLAYER_CONTROLS_HEIGHT }
+  if (hidden) return { top: 0, bottom: 0 }
+
+  let bottom = config.UI_PLAYER_CONTROLS_HEIGHT
+
+  // These all sit at the bottom of the window, so leaving room underneath the
+  // video is enough to let them be seen and clicked
+  for (const element of document.querySelectorAll(OVER_VIDEO)) {
+    const rect = element.getBoundingClientRect()
+    if (rect.width === 0 || rect.height === 0) continue
+    bottom = Math.max(bottom, Math.ceil(window.innerHeight - rect.top))
+  }
+
+  return { top: config.UI_HEADER_HEIGHT, bottom }
 }
 
 function open (state) {

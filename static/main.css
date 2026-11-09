@@ -657,20 +657,19 @@ body.drag .app::after {
 .player .controls .scrub-bar {
   position: absolute;
   width: 100%;
-  height: 23px; /* 3px .loading-bar plus 10px above and below */
-  top: -10px;
+  height: 33px; /* 5px .loading-bar plus 14px above and below */
+  top: -14px;
   left: 0;
   -webkit-app-region: no-drag;
 }
 
 .player .controls .loading-bar {
-  position: relative;
+  position: absolute;
   width: 100%;
-  top: -3px;
-  height: 3px;
+  top: -5px;
+  height: 5px;
   background-color: rgba(0, 0, 0, 0.3);
   transition: all 0.1s ease-out;
-  position: absolute;
 }
 
 .player .controls .loading-bar-part {
@@ -682,10 +681,10 @@ body.drag .app::after {
 
 .player .controls .playback-cursor {
   position: absolute;
-  top: -3px;
+  top: -5px;
   background-color: #FFF;
-  width: 3px;
-  height: 3px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   margin-top: 0;
   margin-left: 0;
@@ -713,14 +712,15 @@ body.drag .app::after {
 }
 
 .player .playback-bar:hover .loading-bar {
-  height: 5px;
+  top: -7px;
+  height: 7px;
 }
 
 .player .playback-bar:hover .playback-cursor {
-  top: -8px;
-  margin-left: -5px;
-  width: 14px;
-  height: 14px;
+  top: -10px;
+  margin-left: -6px;
+  width: 16px;
+  height: 16px;
 }
 
 .player .controls .options-list {

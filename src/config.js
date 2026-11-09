@@ -111,10 +111,10 @@ module.exports = {
   UI_TORRENT_HEIGHT,
 
   // How tall the player's controls are, in pixels: the 38px bar at the bottom
-  // plus the 10px of the seek bar that sticks out above it (see
+  // plus the 14px of the seek bar that sticks out above it (see
   // ".player .controls .scrub-bar" in static/main.css). The video window is
   // kept clear of this strip, so the seek bar can be seen and grabbed.
-  UI_PLAYER_CONTROLS_HEIGHT: UI_HEADER_HEIGHT + 10
+  UI_PLAYER_CONTROLS_HEIGHT: UI_HEADER_HEIGHT + 14
 }
 
 function getConfigPath () {

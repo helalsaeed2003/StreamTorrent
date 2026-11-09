@@ -1217,7 +1217,7 @@ function renderPreview (state) {
 
   return (
     <div
-      key='preview' style={{
+      key='preview' className='scrub-preview' style={{
         position: 'absolute',
         bottom: 50,
         left: xPos,

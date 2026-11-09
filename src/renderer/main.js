@@ -220,16 +220,18 @@ function lazyLoadCast () {
 function update () {
   controllers.playback().showOrHidePlayerControls()
 
-  // The video area grows and shrinks as the controls hide and show, and mpv
-  // draws in a window of its own, so it has to be told. This is checked every
-  // time round rather than only when the controls change, because dispatch()
-  // consumes that change before this point when the mouse is what moved.
-  MpvPlayer.updateInsets(state)
-
   // React drops the ref if a render throws, and update() runs on a timer, so
   // without this one bad render would leave the app throwing here every second
   // with a dead window. Skip the repaint instead and let the next one recover.
   if (app) app.setState(state)
+
+  // The video area grows and shrinks as the controls hide and show, and as
+  // menus open over the video, and mpv draws in a window of its own, so it
+  // has to be told. This runs after the repaint, since it measures what the
+  // page has just drawn, and every time round rather than only when the
+  // controls change, because dispatch() consumes that change before this
+  // point when the mouse is what moved.
+  MpvPlayer.updateInsets(state)
   updateElectron()
 }
 
