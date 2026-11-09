@@ -35,6 +35,7 @@ const telemetry = require('./lib/telemetry')
 const sound = require('./lib/sound')
 const TorrentPlayer = require('./lib/torrent-player')
 const MpvPlayer = require('./lib/mpv-player')
+const PlayerMenu = require('./lib/player-menu')
 
 // Perf optimization: Needed immediately, so do not lazy load it below
 const TorrentListController = require('./controllers/torrent-list-controller')
@@ -166,6 +167,9 @@ function onState (err, _state) {
   // Add YouTube style hotkey shortcuts
   window.addEventListener('keydown', onKeydown)
 
+  // Clicking away from the controls puts the player's menus away
+  document.addEventListener('click', onDocumentClick)
+
   document.addEventListener('wheel', event => {
     // ctrlKey detects pinch to zoom, http://crbug.com/289887.
     // Swallow it so the page doesn't zoom, but don't toggle full screen: it
@@ -232,6 +236,10 @@ function update () {
   // controls change, because dispatch() consumes that change before this
   // point when the mouse is what moved.
   MpvPlayer.updateInsets(state)
+
+  // The speed, subtitle and audio menus are drawn in a window of their own,
+  // over the video, so they are told from here what to show
+  PlayerMenu.sync(state)
   updateElectron()
 }
 
@@ -333,11 +341,11 @@ const dispatchHandlers = {
   toggleSubtitlesMenu: () => controllers.subtitles().toggleSubtitlesMenu(),
   checkForSubtitles: () => controllers.subtitles().checkForSubtitles(),
   addSubtitles: (files, autoSelect) => controllers.subtitles().addSubtitles(files, autoSelect),
-  changeSubtitleDelay: (dir, reopen) =>
-    controllers.subtitles().changeSubtitleDelay(dir, reopen),
-  resetSubtitleDelay: (reopen) => controllers.subtitles().resetSubtitleDelay(reopen),
-  changeSubtitleScale: (dir, reopen) =>
-    controllers.subtitles().changeSubtitleScale(dir, reopen),
+  changeSubtitleDelay: (dir) => controllers.subtitles().changeSubtitleDelay(dir),
+  setSubtitleDelay: (seconds) => controllers.subtitles().setSubtitleDelay(seconds),
+  resetSubtitleDelay: () => controllers.subtitles().setSubtitleDelay(0),
+  changeSubtitleScale: (dir) => controllers.subtitles().changeSubtitleScale(dir),
+  setSubtitleScale: (scale) => controllers.subtitles().setSubtitleScale(scale),
 
   // Audio Tracks
   selectAudioTrack: (index) => controllers.audioTracks().selectAudioTrack(index),
@@ -603,6 +611,15 @@ function onPaste (e) {
   if (e && editableHtmlTags.has(e.target.tagName.toLowerCase())) return
   controllers.torrentList().addTorrent(electron.clipboard.readText())
 
+  update()
+}
+
+// A click anywhere but the controls closes the player's menus. The buttons
+// that open them are in the controls, so they go on toggling as they should.
+function onDocumentClick (e) {
+  if (!state.playing.openMenu) return
+  if (e.target.closest && e.target.closest('.player .controls')) return
+  state.playing.openMenu = null
   update()
 }
 

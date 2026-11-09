@@ -832,6 +832,16 @@ function renderPlayerControls (state) {
     </div>,
 
     <i
+      key='back'
+      className='icon back float-left'
+      onClick={dispatcher('backToList')}
+      role='button'
+      aria-label='Back to the list'
+    >
+      chevron_left
+    </i>,
+
+    <i
       key='skip-previous'
       className={'icon skip-previous float-left ' + prevClass}
       onClick={dispatcher('previousTrack')}

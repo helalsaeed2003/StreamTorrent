@@ -255,7 +255,7 @@ function indexOfTrack (tracks, id) {
  */
 function insetsFor (state) {
   return {
-    top: config.UI_HEADER_HEIGHT,
+    top: 0,
     bottom: config.UI_PLAYER_CONTROLS_HEIGHT + config.UI_PLAYER_PREVIEW_HEIGHT
   }
 }

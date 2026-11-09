@@ -5,7 +5,6 @@ const { ipcRenderer } = require('electron')
 const config = require('../../config')
 const { dispatch } = require('../lib/dispatcher')
 const MpvPlayer = require('../lib/mpv-player')
-const { showContextMenu } = require('../lib/context-menu')
 
 /**
  * Subtitles, handled by the embedded mpv engine.
@@ -123,6 +122,7 @@ module.exports = class SubtitlesController {
   selectSubtitle (index) {
     const state = this.state
     const tracks = state.playing.subtitles.tracks || []
+    state.playing.openMenu = null
 
     if (index === -1 || !tracks[index]) {
       MpvPlayer.setSubtitleTrack(null)
@@ -140,7 +140,6 @@ module.exports = class SubtitlesController {
         : { type: 'track', language: track.language || '', id: track.id })
     }
 
-    state.playing.subtitles.showMenu = false
     dispatch('stateSave')
   }
 
@@ -154,7 +153,6 @@ module.exports = class SubtitlesController {
     if (!torrentSummary) return
 
     state.playing.pendingSubtitle = index
-    state.playing.subtitles.showMenu = false
     state.saved.prefs.subtitlesEnabled = true
     this.rememberChoice({ type: 'file', index })
 
@@ -204,116 +202,47 @@ module.exports = class SubtitlesController {
     }
   }
 
-  /**
-   * The subtitle menu: tracks inside the video, subtitle files sitting in the
-   * torrent, one from the user's own machine, and the timing and size controls.
-   *
-   * Drawn by the system, above the video, which mpv paints into a window of its
-   * own that the page cannot draw on top of. Picking one of the timing or size
-   * items opens the menu again, so they can be nudged several times over.
-   */
+  // The subtitle menu, drawn in a window of its own over the video
   toggleSubtitlesMenu () {
     const playing = this.state.playing
+    playing.openMenu = playing.openMenu === 'subtitles' ? null : 'subtitles'
     playing.mouseStationarySince = new Date().getTime()
-
-    const subtitles = playing.subtitles
-    const items = []
-
-    if (subtitles.tracks.length > 0) {
-      items.push({ label: 'In this video', enabled: false })
-      subtitles.tracks.forEach((track, ix) => {
-        items.push({
-          label: track.label,
-          type: 'radio',
-          checked: subtitles.selectedIndex === ix,
-          action: 'selectSubtitle',
-          args: [ix]
-        })
-      })
-    }
-
-    const files = playing.subtitleFiles || []
-    if (files.length > 0) {
-      items.push({ type: 'separator' })
-      items.push({ label: 'In this torrent', enabled: false })
-      files.forEach(file => {
-        const pending = playing.pendingSubtitle === file.index
-        items.push({
-          label: pending ? file.name + ' (fetching…)' : file.name,
-          action: 'selectTorrentSubtitle',
-          args: [file.index]
-        })
-      })
-    }
-
-    items.push({ type: 'separator' })
-    items.push({
-      label: 'Off',
-      type: 'radio',
-      checked: subtitles.selectedIndex === -1,
-      action: 'selectSubtitle',
-      args: [-1]
-    })
-    items.push({ label: 'Load from my computer…', action: 'openSubtitles' })
-
-    items.push({ type: 'separator' })
-    items.push({
-      label: 'Delay ' + formatDelay(playing.subtitleDelay || 0),
-      enabled: false
-    })
-    items.push({ label: 'Show earlier', action: 'changeSubtitleDelay', args: [-1, true] })
-    items.push({ label: 'Show later', action: 'changeSubtitleDelay', args: [1, true] })
-    items.push({ label: 'Reset timing', action: 'resetSubtitleDelay', args: [true] })
-
-    items.push({ type: 'separator' })
-    items.push({
-      label: 'Size ' + Math.round((playing.subtitleScale || 1) * 100) + '%',
-      enabled: false
-    })
-    items.push({ label: 'Smaller', action: 'changeSubtitleScale', args: [-1, true] })
-    items.push({ label: 'Bigger', action: 'changeSubtitleScale', args: [1, true] })
-
-    showContextMenu(items)
   }
 
-  // Nudge the subtitles earlier or later, in small steps
-  changeSubtitleDelay (direction, reopen) {
+  // Put the subtitles exactly this far ahead of or behind the picture
+  setSubtitleDelay (seconds) {
     const playing = this.state.playing
-    const delay = (playing.subtitleDelay || 0) + direction * config.SUBTITLE_DELAY_STEP
-    playing.subtitleDelay = Math.round(delay * 100) / 100
+    playing.subtitleDelay = Math.round(seconds * 100) / 100
     MpvPlayer.setSubtitleDelay(playing.subtitleDelay)
 
     const fileSummary = this.state.getPlayingFileSummary()
-    if (fileSummary) fileSummary.subtitleDelay = playing.subtitleDelay
+    if (fileSummary) {
+      if (playing.subtitleDelay) fileSummary.subtitleDelay = playing.subtitleDelay
+      else delete fileSummary.subtitleDelay
+    }
     dispatch('stateSave')
-
-    // Chosen from the menu, which the system closed on the way: put it back
-    // up so the timing can be nudged again
-    if (reopen) this.toggleSubtitlesMenu()
   }
 
-  resetSubtitleDelay (reopen) {
-    const playing = this.state.playing
-    playing.subtitleDelay = 0
-    MpvPlayer.setSubtitleDelay(0)
-    const fileSummary = this.state.getPlayingFileSummary()
-    if (fileSummary) delete fileSummary.subtitleDelay
-    dispatch('stateSave')
-
-    if (reopen) this.toggleSubtitlesMenu()
-  }
-
-  // Bigger or smaller subtitles, remembered for next time
-  changeSubtitleScale (direction, reopen) {
+  // Draw the subtitles at exactly this size, 1 being the normal one
+  setSubtitleScale (scale) {
     const state = this.state
-    const scale = Math.max(0.3, Math.min(4,
-      (state.playing.subtitleScale || 1) + direction * 0.1))
-    state.playing.subtitleScale = Math.round(scale * 100) / 100
+    state.playing.subtitleScale = Math.max(0.3, Math.min(4, scale))
     MpvPlayer.setSubtitleScale(state.playing.subtitleScale)
     state.saved.prefs.subtitleScale = state.playing.subtitleScale
     dispatch('stateSave')
+  }
 
-    if (reopen) this.toggleSubtitlesMenu()
+  // Nudge the subtitles earlier or later, in small steps. The keyboard uses
+  // this; the menu sets the delay outright.
+  changeSubtitleDelay (direction) {
+    const delay = (this.state.playing.subtitleDelay || 0) +
+      direction * config.SUBTITLE_DELAY_STEP
+    this.setSubtitleDelay(delay)
+  }
+
+  // Bigger or smaller subtitles, remembered for next time
+  changeSubtitleScale (direction) {
+    this.setSubtitleScale((this.state.playing.subtitleScale || 1) + direction * 0.1)
   }
 
   rememberChoice (choice) {
@@ -329,10 +258,4 @@ function folderOf (file) {
 // File name without its extension, lower case, for matching video to subtitle
 function baseName (name) {
   return String(name || '').replace(/\.[^.]+$/, '').toLowerCase()
-}
-
-// "+0.4s" / "-1.2s" / "0s"
-function formatDelay (delay) {
-  if (!delay) return '0s'
-  return (delay > 0 ? '+' : '') + delay.toFixed(1) + 's'
 }

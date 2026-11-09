@@ -122,17 +122,17 @@ function getDefaultPlayState () {
     lastTimeUpdate: 0, /* Unix time in ms */
     mouseStationarySince: 0, /* Unix time in ms */
     playbackRate: 1, /* overwritten from saved prefs when the player opens */
-    showPlaybackRateMenu: false, /* the speed popover, above the video */
+    /* which menu is up: 'speed', 'subtitles', 'audio' or null. They are drawn
+       in a window of their own, over the video */
+    openMenu: null,
     volume: 1,
     subtitles: {
       tracks: [], /* subtitle tracks, each {label, language, ...} */
-      selectedIndex: -1, /* current subtitle track */
-      showMenu: false /* popover menu, above the video */
+      selectedIndex: -1 /* current subtitle track */
     },
     audioTracks: {
       tracks: [],
-      selectedIndex: 0, /* current audio track */
-      showMenu: false /* popover menu, above the video */
+      selectedIndex: 0 /* current audio track */
     },
     aspectRatio: 0 /* aspect ratio of the video */
   }
@@ -219,6 +219,9 @@ function shouldHidePlayerControls () {
   // The image viewer has no timeline to get out of the way of, so its controls
   // stay put
   if (this.playing.type === 'image') return false
+
+  // A menu is up, and it hangs off the controls
+  if (this.playing.openMenu) return false
 
   return this.location.url() === 'player' &&
     this.playing.mouseStationarySince !== 0 &&

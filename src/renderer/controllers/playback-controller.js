@@ -2,7 +2,6 @@ const { ipcRenderer } = require('electron')
 const path = require('path')
 
 const Cast = require('../lib/cast')
-const config = require('../../config')
 const { dispatch } = require('../lib/dispatcher')
 const telemetry = require('../lib/telemetry')
 const { UnplayableFileError, UnplayableTorrentError } = require('../lib/errors')
@@ -12,7 +11,6 @@ const TorrentSummary = require('../lib/torrent-summary')
 const Playlist = require('../lib/playlist')
 const PlaybackPosition = require('../lib/playback-position')
 const MpvPlayer = require('../lib/mpv-player')
-const { showContextMenu } = require('../lib/context-menu')
 const State = require('../lib/state')
 
 // Videos play through the embedded mpv engine; audio and images stay with the
@@ -221,24 +219,15 @@ module.exports = class PlaybackController {
     state.saved.prefs.playbackRate = state.playing.playbackRate
     dispatch('stateSave')
 
-    state.playing.showPlaybackRateMenu = false
     // Wait a bit before we hide the controls and header again
     state.playing.mouseStationarySince = new Date().getTime()
   }
 
-  // The speed menu. Drawn by the system, above the video, which mpv paints into
-  // a window of its own that the page cannot draw on top of.
+  // The speed menu, drawn in a window of its own over the video
   togglePlaybackRateMenu () {
     const playing = this.state.playing
+    playing.openMenu = playing.openMenu === 'speed' ? null : 'speed'
     playing.mouseStationarySince = new Date().getTime()
-
-    showContextMenu(config.PLAYBACK_RATES.map(rate => ({
-      label: rate + 'x',
-      type: 'radio',
-      checked: playing.playbackRate === rate,
-      action: 'setPlaybackRate',
-      args: [rate]
-    })))
   }
 
   // Change the volume, in range [0, 1], by some amount

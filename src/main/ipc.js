@@ -84,6 +84,28 @@ function init () {
   })
 
   /**
+   * The player's own menus, which live in a window of their own so they can be
+   * drawn over the video
+   */
+
+  ipcMain.on('player-menu-show', (e, payload) => {
+    windows.playerMenu.show(payload)
+  })
+
+  ipcMain.on('player-menu-hide', () => {
+    windows.playerMenu.hide()
+  })
+
+  ipcMain.on('player-menu-height', (e, height) => {
+    windows.playerMenu.setHeight(height)
+  })
+
+  ipcMain.on('player-menu-action', (e, action, args) => {
+    if (!windows.playerMenu.isOpen()) return
+    windows.main.dispatch(action, ...(args || []))
+  })
+
+  /**
    * Dialog
    */
 
