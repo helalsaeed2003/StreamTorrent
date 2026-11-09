@@ -1357,33 +1357,73 @@ video::-webkit-media-text-track-container {
 
 /*
  * The cloud button on a file row: download this video now, ready to watch
- * later, without opening the player
+ * later, without opening the player. A ring around it fills up as the file
+ * comes down.
  */
 .torrent-details td.col-preload {
-  width: 28px;
+  width: 30px;
   padding-right: 4px;
   text-align: right;
 }
 
-.torrent-details td.col-preload .icon.preload {
-  font-size: 18px;
+.torrent-details .preload {
+  position: relative;
+  /* A box of its own, so the cloud sits level with the text beside it */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
   vertical-align: middle;
-  opacity: 0.45;
   cursor: pointer;
 }
 
-.torrent-details td.col-preload .icon.preload:hover {
+.torrent-details .preload .icon {
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0.45;
+  /* Undo the 3px nudge every other icon in this table gets: this one is
+     centred in a box of its own, with the ring around it */
+  position: static;
+  top: auto;
+}
+
+.torrent-details .preload:hover .icon {
   opacity: 1;
 }
 
 /* Being fetched right now */
-.torrent-details td.col-preload .icon.preload.active {
+.torrent-details .preload.active .icon {
   opacity: 1;
   color: #ff4081;
 }
 
 /* Fetched: ready to play */
-.torrent-details td.col-preload .icon.preload.done {
+.torrent-details .preload.done .icon {
   opacity: 1;
   color: #8bc34a;
+}
+
+.torrent-details .preload-ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 24px;
+  height: 24px;
+  /* Start the ring at twelve o'clock rather than three */
+  transform: rotate(-90deg);
+}
+
+.torrent-details .preload-ring circle {
+  fill: none;
+  stroke-width: 2;
+}
+
+.torrent-details .preload-ring-track {
+  stroke: rgba(255, 255, 255, 0.18);
+}
+
+.torrent-details .preload-ring-fill {
+  stroke: #ff4081;
+  transition: stroke-dashoffset 0.3s linear;
 }

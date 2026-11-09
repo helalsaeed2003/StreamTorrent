@@ -377,9 +377,11 @@ module.exports = class TorrentList extends React.Component {
     const fileProg = torrentSummary.progress &&
       torrentSummary.progress.files &&
       torrentSummary.progress.files[index]
+    let fraction = 0
     if (fileProg && fileProg.numPieces > 0) {
       isDone = fileProg.numPiecesPresent === fileProg.numPieces
-      progress = Math.floor(100 * fileProg.numPiecesPresent / fileProg.numPieces) + '%'
+      fraction = fileProg.numPiecesPresent / fileProg.numPieces
+      progress = Math.floor(100 * fraction) + '%'
     }
 
     // Is this the file we're downloading right now, and is it the one that was
@@ -446,14 +448,14 @@ module.exports = class TorrentList extends React.Component {
           {hasPosition ? this.renderWatchProgress(file) : null}
         </td>
         <td className={'col-progress ' + rowClass}>
-          {isStreaming || isPreloading ? progress : ''}
+          {isStreaming ? progress : ''}
         </td>
         <td className={'col-size ' + rowClass}>
           {prettyBytes(file.length)}
         </td>
         <td className='col-preload'>
           {isPlayable
-            ? this.renderPreloadButton(infoHash, index, isPreloading, isDone, progress)
+            ? this.renderPreloadButton(infoHash, index, isPreloading, isDone, fraction)
             : null}
         </td>
         <td className='col-select'>
@@ -467,22 +469,23 @@ module.exports = class TorrentList extends React.Component {
 
   /**
    * The cloud button on a file row: fetch this video now, so it is ready to
-   * watch later, without opening the player. Clicking it again stops.
+   * watch later, without opening the player. Clicking it again stops. While it
+   * is coming down, a ring around the cloud fills up.
    */
-  renderPreloadButton (infoHash, index, isPreloading, isDone, progress) {
+  renderPreloadButton (infoHash, index, isPreloading, isDone, fraction) {
     const done = isPreloading && isDone
 
     let title
     if (done) title = 'Downloaded, ready to play'
-    else if (isPreloading) title = 'Downloading ' + progress + ', click to stop'
+    else if (isPreloading) title = 'Downloading ' + Math.floor(100 * fraction) + '%, click to stop'
     else title = 'Download this file now, without playing it'
 
-    const classes = ['icon', 'preload']
+    const classes = ['preload']
     if (isPreloading) classes.push('active')
     if (done) classes.push('done')
 
     return (
-      <i
+      <span
         className={classes.join(' ')}
         title={title}
         role='button'
@@ -492,8 +495,9 @@ module.exports = class TorrentList extends React.Component {
           dispatch('togglePreloadFile', infoHash, index)
         }}
       >
-        {done ? 'cloud_done' : 'cloud_download'}
-      </i>
+        {isPreloading && !done ? renderPreloadRing(fraction) : null}
+        <i className='icon'>{done ? 'cloud_done' : 'cloud_download'}</i>
+      </span>
     )
   }
 
@@ -591,4 +595,25 @@ function getErrorMessage (torrentSummary) {
     )
   }
   return 'Error'
+}
+
+// The ring that fills up around the cloud button as the file comes down
+function renderPreloadRing (fraction) {
+  const radius = 10
+  const circumference = 2 * Math.PI * radius
+  const filled = Math.max(0, Math.min(1, fraction))
+
+  return (
+    <svg className='preload-ring' viewBox='0 0 24 24' key='preload-ring'>
+      <circle className='preload-ring-track' cx='12' cy='12' r={radius} />
+      <circle
+        className='preload-ring-fill'
+        cx='12'
+        cy='12'
+        r={radius}
+        strokeDasharray={circumference}
+        strokeDashoffset={circumference * (1 - filled)}
+      />
+    </svg>
+  )
 }
