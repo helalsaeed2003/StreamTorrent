@@ -14,7 +14,7 @@ const main = module.exports = {
   win: null
 }
 
-const { app, BrowserWindow, screen } = require('electron')
+const { app, BrowserWindow, Menu, clipboard, screen } = require('electron')
 const debounce = require('debounce')
 
 const config = require('../../config')
@@ -51,6 +51,28 @@ function init (state, options) {
     y: initialBounds.y
   })
   require('@electron/remote/main').enable(win.webContents)
+
+  /**
+   * The right-click menu. It is built here rather than in the page because a
+   * menu popped up from the page is closed again by the very click that asked
+   * for it.
+   *
+   * In a text box it is the usual Cut, Copy and Paste. Anywhere else it is a
+   * single Paste, which adds whatever torrent or magnet link is on the
+   * clipboard, the same as Ctrl+V does.
+   */
+  win.webContents.on('context-menu', (e, params) => {
+    const text = clipboard.readText().trim()
+    const template = params.isEditable
+      ? [{ role: 'cut' }, { role: 'copy' }, { role: 'paste' }]
+      : [{
+          label: 'Paste torrent',
+          enabled: text !== '',
+          click: () => dispatch('addTorrent', text)
+        }]
+
+    Menu.buildFromTemplate(template).popup({ window: win, x: params.x, y: params.y })
+  })
 
   win.loadURL(config.WINDOW_MAIN)
 

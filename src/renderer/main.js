@@ -163,9 +163,6 @@ function onState (err, _state) {
   // ...same thing if you paste a torrent
   document.addEventListener('paste', onPaste)
 
-  // Right-click offers Paste, so a magnet link can be added with the mouse
-  document.addEventListener('contextmenu', onContextMenu)
-
   // Add YouTube style hotkey shortcuts
   window.addEventListener('keydown', onKeydown)
 
@@ -597,37 +594,6 @@ function onPaste (e) {
   controllers.torrentList().addTorrent(electron.clipboard.readText())
 
   update()
-}
-
-/**
- * Builds the right-click menu. In a text box it is the usual Cut, Copy and
- * Paste; anywhere else it is a single Paste, which adds whatever torrent or
- * magnet link is on the clipboard, the same as Ctrl+V does.
- */
-function onContextMenu (e) {
-  e.preventDefault()
-
-  const { Menu, MenuItem } = require('@electron/remote')
-  const menu = new Menu()
-  const inTextBox = editableHtmlTags.has(e.target.tagName.toLowerCase())
-
-  if (inTextBox) {
-    menu.append(new MenuItem({ role: 'cut' }))
-    menu.append(new MenuItem({ role: 'copy' }))
-    menu.append(new MenuItem({ role: 'paste' }))
-  } else {
-    const text = electron.clipboard.readText().trim()
-    menu.append(new MenuItem({
-      label: 'Paste torrent',
-      enabled: text !== '',
-      click: () => {
-        controllers.torrentList().addTorrent(text)
-        update()
-      }
-    }))
-  }
-
-  menu.popup()
 }
 
 function onKeydown (e) {
