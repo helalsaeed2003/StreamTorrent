@@ -360,6 +360,9 @@ module.exports = class TorrentList extends React.Component {
         </td>
         <td className='col-progress' />
         <td className='col-size'>{fileCount === 1 ? '1 file' : fileCount + ' files'}</td>
+        <td className='col-preload'>
+          {this.renderFolderPreloadButton(torrentSummary, node)}
+        </td>
         <td className='col-select' />
       </tr>
     )
@@ -473,12 +476,55 @@ module.exports = class TorrentList extends React.Component {
    * is coming down, a ring around the cloud fills up.
    */
   renderPreloadButton (infoHash, index, isPreloading, isDone, fraction) {
+    return this.renderCloud(isPreloading, isDone, fraction, {
+      idle: 'Download this file now, without playing it',
+      busy: 'Downloading %, click to stop',
+      done: 'Downloaded, ready to play'
+    }, () => dispatch('togglePreloadFile', infoHash, index))
+  }
+
+  /**
+   * The same button on a folder, which fetches every video inside it. The ring
+   * shows how far along the whole folder is.
+   */
+  renderFolderPreloadButton (torrentSummary, node) {
+    const state = this.props.state
+    const infoHash = torrentSummary.infoHash
+    const indexes = playableIndexesIn(node, torrentSummary)
+    if (indexes.length === 0) return null
+
+    const preloads = state.preloads.get(infoHash)
+    const chosen = indexes.filter(i => preloads && preloads.has(i))
+    const isPreloading = chosen.length === indexes.length
+
+    // How far along the folder is, counted in pieces across its videos
+    const files = (torrentSummary.progress && torrentSummary.progress.files) || []
+    let pieces = 0
+    let present = 0
+    indexes.forEach(i => {
+      const fileProg = files[i]
+      if (!fileProg || !fileProg.numPieces) return
+      pieces += fileProg.numPieces
+      present += fileProg.numPiecesPresent
+    })
+    const fraction = pieces > 0 ? present / pieces : 0
+    const isDone = pieces > 0 && present === pieces
+
+    return this.renderCloud(isPreloading, isDone, fraction, {
+      idle: 'Download every video in this folder',
+      busy: 'Downloading this folder, %, click to stop',
+      done: 'Downloaded, ready to play'
+    }, () => dispatch('togglePreloadFolder', infoHash, indexes))
+  }
+
+  // The cloud itself, with its ring, however it was asked for
+  renderCloud (isPreloading, isDone, fraction, titles, onToggle) {
     const done = isPreloading && isDone
 
     let title
-    if (done) title = 'Downloaded, ready to play'
-    else if (isPreloading) title = 'Downloading ' + Math.floor(100 * fraction) + '%, click to stop'
-    else title = 'Download this file now, without playing it'
+    if (done) title = titles.done
+    else if (isPreloading) title = titles.busy.replace('%', Math.floor(100 * fraction) + '%')
+    else title = titles.idle
 
     const classes = ['preload']
     if (isPreloading) classes.push('active')
@@ -492,7 +538,7 @@ module.exports = class TorrentList extends React.Component {
         aria-label={title}
         onClick={(e) => {
           e.stopPropagation()
-          dispatch('togglePreloadFile', infoHash, index)
+          onToggle()
         }}
       >
         {isPreloading && !done ? renderPreloadRing(fraction) : null}
@@ -595,6 +641,21 @@ function getErrorMessage (torrentSummary) {
     )
   }
   return 'Error'
+}
+
+// Every video or image inside a folder, however deeply nested
+function playableIndexesIn (node, torrentSummary) {
+  const indexes = []
+
+  const walk = (folder) => {
+    folder.files.forEach(entry => {
+      if (TorrentPlayer.isPlayable(entry.file)) indexes.push(entry.index)
+    })
+    folder.folders.forEach(walk)
+  }
+  walk(node)
+
+  return indexes
 }
 
 // The ring that fills up around the cloud button as the file comes down

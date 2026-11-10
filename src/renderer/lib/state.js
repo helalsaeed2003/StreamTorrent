@@ -121,7 +121,7 @@ function getDefaultPlayState () {
     isStalled: false,
     lastTimeUpdate: 0, /* Unix time in ms */
     mouseStationarySince: 0, /* Unix time in ms */
-    playbackRate: 1, /* overwritten from saved prefs when the player opens */
+    playbackRate: 1, /* back to normal speed for every video */
     /* which menu is up: 'speed', 'subtitles', 'audio' or null. They are drawn
        in a window of their own, over the video */
     openMenu: null,
@@ -153,7 +153,6 @@ function setupStateSaved () {
       torrentsFolderPath: '',
       highestPlaybackPriority: true,
       globalTrackers: defaultAnnounceList,
-      playbackRate: 1, /* remembered between videos and app restarts */
       tempPath: '' /* '' means the default folder, inside the program folder */
     },
     torrents: config.DEFAULT_TORRENTS.map(createTorrentObject),
@@ -263,7 +262,6 @@ async function load (cb) {
     // saved torrents, open folders and the chosen speed all survive an upgrade
     if (!saved.folderExpanded) saved.folderExpanded = {}
     if (!saved.prefs) saved.prefs = {}
-    if (typeof saved.prefs.playbackRate !== 'number') saved.prefs.playbackRate = 1
     if (typeof saved.prefs.tempPath !== 'string') saved.prefs.tempPath = ''
     if (!Array.isArray(saved.torrents)) saved.torrents = []
     if (!Array.isArray(saved.staleTempPaths)) saved.staleTempPaths = []
@@ -287,8 +285,17 @@ async function load (cb) {
   }
 }
 
-// Write state.saved to the JSON state file
-async function saveImmediate (state, cb) {
+/**
+ * Writes the torrent list, the preferences and where each video was left off
+ * to the state file.
+ *
+ * Written here rather than through application-config: the file is written to
+ * a temporary name alongside it and then renamed over the old one, so a crash
+ * or a power cut in the middle leaves the last good copy in place. A failure
+ * is shouted about rather than passed over, since losing this file means
+ * losing the torrent list.
+ */
+function saveImmediate (state, cb) {
   console.log('Saving state to ' + appConfig.filePath)
 
   // Clean up, so that we're not saving any pending state
@@ -311,10 +318,22 @@ async function saveImmediate (state, cb) {
       return torrent
     })
 
+  const fs = require('fs')
+  const file = appConfig.filePath
+  const temporary = file + '.writing'
+
   try {
-    await appConfig.write(copy)
-    State.emit('stateSaved')
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.writeFileSync(temporary, JSON.stringify(copy, null, 2))
+    fs.renameSync(temporary, file)
   } catch (err) {
-    console.error(err)
+    console.error('Could not save the state file ' + file, err)
+    try {
+      fs.rmSync(temporary, { force: true })
+    } catch (ignored) {}
   }
+
+  // Said either way: whoever is waiting to quit should not be left hanging
+  State.emit('stateSaved')
+  if (cb) cb()
 }

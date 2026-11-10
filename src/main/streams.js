@@ -41,6 +41,9 @@ function wipe (saved) {
   if (saved) {
     current = tempPath.resolve(saved.prefs)
     stale = (saved.staleTempPaths || []).filter(p => p && p !== current)
+
+    // Whatever an earlier run left behind, as long as that run is over
+    tempPath.wipeStaleSessions(saved.prefs, { log })
   }
 
   let allGone = true

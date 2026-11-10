@@ -152,6 +152,11 @@ function onState (err, _state) {
   // a progress bar and to keep the cursor in sync when playing a video
   setInterval(update, 1000)
 
+  // The torrent list and where each video was left off are written out every
+  // half minute. Waiting for the app to quit is not enough: an update, which
+  // closes the app from outside, a crash or a power cut would take the lot.
+  setInterval(() => dispatch('stateSave'), 30 * 1000)
+
   // Listen for messages from the main process
   setupIpc()
 
@@ -167,8 +172,8 @@ function onState (err, _state) {
   // Add YouTube style hotkey shortcuts
   window.addEventListener('keydown', onKeydown)
 
-  // Clicking away from the controls puts the player's menus away
-  document.addEventListener('click', onDocumentClick)
+  // Clicking anywhere puts the player's menus away
+  document.addEventListener('click', onDocumentClick, true)
 
   document.addEventListener('wheel', event => {
     // ctrlKey detects pinch to zoom, http://crbug.com/289887.
@@ -274,6 +279,8 @@ const dispatchHandlers = {
   resumeAllTorrents: () => controllers.torrentList().resumeAllTorrents(),
   togglePreloadFile: (infoHash, index) =>
     controllers.torrentList().togglePreloadFile(infoHash, index),
+  togglePreloadFolder: (infoHash, indexes) =>
+    controllers.torrentList().togglePreloadFolder(infoHash, indexes),
   toggleTorrentFile: (infoHash, index) =>
     controllers.torrentList().toggleTorrentFile(infoHash, index),
   confirmDeleteTorrent: (infoHash, deleteData) =>
@@ -621,12 +628,22 @@ function onPaste (e) {
   update()
 }
 
-// A click anywhere but the controls closes the player's menus. The buttons
-// that open them are in the controls, so they go on toggling as they should.
+/**
+ * A click anywhere closes an open menu, and is swallowed: clicking the
+ * picture to put a menu away should not also pause the video.
+ *
+ * The buttons that open the menus are in the controls, so clicks there are
+ * left alone and go on toggling as they should.
+ */
 function onDocumentClick (e) {
-  if (!state.playing.openMenu) return
+  const anyMenu = state.playing.openMenu || state.devices.castMenu
+  if (!anyMenu) return
   if (e.target.closest && e.target.closest('.player .controls')) return
+
+  e.preventDefault()
+  e.stopPropagation()
   state.playing.openMenu = null
+  state.devices.castMenu = null
   update()
 }
 

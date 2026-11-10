@@ -54,15 +54,8 @@ if (process.platform === 'win32') {
   argv = argv.filter((arg) => !arg.includes('--squirrel'))
 }
 
-if (!shouldQuit && !config.IS_PORTABLE) {
-  // Prevent multiple instances of app from running at same time. New instances
-  // signal this instance and quit. Note: This feature creates a lock file in
-  // %APPDATA%\Roaming\WebTorrent so we do not do it for the Portable App since
-  // we want to be "silent" as well as "portable".
-  if (!app.requestSingleInstanceLock()) {
-    shouldQuit = true
-  }
-}
+// Several copies of StreamTorrent may run at once, each with a temp folder of
+// its own (see src/temp-path.js), so there is no single-instance lock here.
 
 if (shouldQuit) {
   app.quit()

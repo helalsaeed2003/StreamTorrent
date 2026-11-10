@@ -247,17 +247,25 @@ function indexOfTrack (tracks, id) {
 /**
  * Where the video sits in the window.
  *
- * Always the same place, whether the controls are on screen or not: mpv draws
- * in a window of its own, so moving it would resize the picture every time the
- * mouse stopped or a menu opened. The strip left free at the bottom holds the
- * controls and the time shown while scrubbing; the menus are drawn by the
- * system, above everything, so they need no room of their own.
+ * In a window it is always the same place, whether the controls are on screen
+ * or not: mpv draws in a window of its own, so moving it would resize the
+ * picture every time the mouse stopped. The strip left free at the bottom
+ * holds the controls and the time shown while scrubbing, and the one at the
+ * top holds the header.
+ *
+ * Full screen is for watching, so there the picture takes the whole screen
+ * and only gives the strip back while the controls are showing.
  */
 function insetsFor (state) {
-  return {
-    top: config.UI_HEADER_HEIGHT,
-    bottom: config.UI_PLAYER_CONTROLS_HEIGHT + config.UI_PLAYER_PREVIEW_HEIGHT
+  const bottom = config.UI_PLAYER_CONTROLS_HEIGHT + config.UI_PLAYER_PREVIEW_HEIGHT
+
+  if (state.window.isFullScreen) {
+    return state.shouldHidePlayerControls()
+      ? { top: 0, bottom: 0 }
+      : { top: 0, bottom }
   }
+
+  return { top: config.UI_HEADER_HEIGHT, bottom }
 }
 
 function open (state) {

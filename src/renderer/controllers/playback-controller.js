@@ -204,8 +204,8 @@ module.exports = class PlaybackController {
     this.setPlaybackRate(rates[Math.max(0, Math.min(rates.length - 1, index))])
   }
 
-  // Set an exact playback speed, and remember it for the next video and the
-  // next time the app runs
+  // Set an exact playback speed, for this video only: the next one starts at
+  // normal speed again
   setPlaybackRate (rate) {
     const state = this.state
 
@@ -216,8 +216,7 @@ module.exports = class PlaybackController {
       MpvPlayer.setSpeed(state.playing.playbackRate)
     }
 
-    state.saved.prefs.playbackRate = state.playing.playbackRate
-    dispatch('stateSave')
+    dispatch('update')
 
     // Wait a bit before we hide the controls and header again
     state.playing.mouseStationarySince = new Date().getTime()
@@ -277,11 +276,9 @@ module.exports = class PlaybackController {
     state.playing.infoHash = torrentSummary.infoHash
     state.playing.isReady = false
 
-    // Pick up the speed the user last chose, from this session or an earlier run
-    const savedRate = state.saved.prefs.playbackRate
-    state.playing.playbackRate = this.config.PLAYBACK_RATES.includes(savedRate)
-      ? savedRate
-      : 1
+    // Every video starts at normal speed: a speed picked for one video is
+    // rarely what the next one wants
+    state.playing.playbackRate = 1
 
     // update UI to show pending playback
     sound.play('PLAY')

@@ -86,6 +86,7 @@ function renderMpvVideo (state) {
       className='letterbox mpv-video'
       onMouseMove={dispatcher('mediaMouseMoved')}
       onClick={dispatcher('playPause')}
+      onDoubleClick={dispatcher('toggleFullScreen')}
     >
       {elems}
     </div>
@@ -893,7 +894,12 @@ function renderPlayerControls (state) {
     airplay: { true: 'airplay', false: 'airplay' },
     dlna: { true: 'tv', false: 'tv' }
   }
+  // Switched off in Preferences? Then no cast buttons at all
+  const offersCasting = !state.saved.prefs.hideCasting
+
   castTypes.forEach(castType => {
+    if (!offersCasting) return
+
     // Do we show this button (eg. the Chromecast button) at all?
     const isCasting = state.playing.location.startsWith(castType)
     const player = state.devices[castType]

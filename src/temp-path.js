@@ -20,10 +20,16 @@ const config = require('./config')
 const DEDICATED_FOLDER_NAME = 'StreamTorrent Temp'
 const MARKER_FILE = '.streamtorrent-temp'
 
+// Each run of the app gets a folder of this name plus its process id, so two
+// copies running at once never clear away each other's files
+const SESSION_PREFIX = 'session-'
+
 module.exports = {
   DEDICATED_FOLDER_NAME,
   MARKER_FILE,
+  SESSION_PREFIX,
   resolve,
+  wipeStaleSessions,
   prepare,
   ensure: create,
   isOurs,
@@ -39,12 +45,77 @@ const MARKER_TEXT = [
   ''
 ].join('\r\n')
 
-// The folder we should be using, given the saved preferences.
-// An empty or missing tempPath means "use the default".
+/**
+ * The folder we should be using, given the saved preferences.
+ *
+ * An empty or missing tempPath means "use the default". Inside it, each run of
+ * the app gets a folder of its own, named after the process, so that several
+ * copies of StreamTorrent can run at once without one clearing away what
+ * another is still playing.
+ */
 function resolve (prefs) {
+  return path.join(baseFolder(prefs), SESSION_PREFIX + mainProcessId())
+}
+
+// The folder the per-run folders live in
+function baseFolder (prefs) {
   const chosen = prefs && typeof prefs.tempPath === 'string' ? prefs.tempPath.trim() : ''
   if (!chosen) return config.TEMP_PATH
   return path.join(chosen, DEDICATED_FOLDER_NAME)
+}
+
+// The main process decides the name, so every window of one run agrees on it
+function mainProcessId () {
+  if (process.type === 'renderer') {
+    try {
+      return require('@electron/remote').process.pid
+    } catch (err) {
+      return process.pid
+    }
+  }
+  return process.pid
+}
+
+/**
+ * Clears the folders left behind by runs that are over, leaving alone any that
+ * belong to a copy of the app still going. Called at startup.
+ */
+function wipeStaleSessions (prefs, options = {}) {
+  const base = baseFolder(prefs)
+  const mine = SESSION_PREFIX + mainProcessId()
+  const log = options.log || (() => {})
+
+  let entries
+  try {
+    entries = fs.readdirSync(base, { withFileTypes: true })
+  } catch (err) {
+    return
+  }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    if (!entry.name.startsWith(SESSION_PREFIX)) continue
+    if (entry.name === mine) continue
+
+    const pid = Number(entry.name.slice(SESSION_PREFIX.length))
+    if (isRunning(pid)) {
+      log('leaving ' + entry.name + ' alone: that copy is still running')
+      continue
+    }
+
+    wipe(path.join(base, entry.name), options)
+  }
+}
+
+// Is there still a process with this id?
+function isRunning (pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (err) {
+    return err.code === 'EPERM'
+  }
 }
 
 // Makes sure the folder exists, is writable, and is marked as ours.

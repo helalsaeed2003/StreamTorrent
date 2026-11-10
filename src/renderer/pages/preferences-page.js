@@ -262,6 +262,20 @@ class PreferencesPage extends React.Component {
     dispatch('clearTempNow')
   }
 
+  // Casting can be switched off altogether, for people who never use it
+  castingCheckbox () {
+    return (
+      <Preference>
+        <Checkbox
+          className='control'
+          checked={!this.props.state.saved.prefs.hideCasting}
+          label='Offer to play on a TV (Chromecast, AirPlay, DLNA)'
+          onCheck={(e, value) => dispatch('updatePreferences', 'hideCasting', !value)}
+        />
+      </Preference>
+    )
+  }
+
   render () {
     const style = {
       color: colors.grey400,
@@ -277,6 +291,7 @@ class PreferencesPage extends React.Component {
         </PreferencesSection>
         <PreferencesSection title='Playback'>
           {this.highestPlaybackPriorityCheckbox()}
+          {this.castingCheckbox()}
         </PreferencesSection>
         <PreferencesSection title='Default torrent app'>
           {this.setDefaultAppButton()}

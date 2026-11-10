@@ -245,6 +245,29 @@ module.exports = class TorrentListController {
   }
 
   /**
+   * The cloud button on a folder: fetch every video in it, or stop fetching
+   * them if they were all asked for already.
+   */
+  togglePreloadFolder (infoHash, indexes) {
+    const state = this.state
+    const torrentSummary = TorrentSummary.getByKey(state, infoHash)
+    if (!torrentSummary || !torrentSummary.files || indexes.length === 0) return
+
+    const preloads = state.preloads.get(infoHash) || new Set()
+    const allChosen = indexes.every(index => preloads.has(index))
+
+    indexes.forEach(index => {
+      if (allChosen) preloads.delete(index)
+      else preloads.add(index)
+    })
+
+    if (preloads.size > 0) state.preloads.set(infoHash, preloads)
+    else state.preloads.delete(infoHash)
+
+    this.applySelections(infoHash)
+  }
+
+  /**
    * Works out which files of a torrent should be downloading - the one being
    * watched, plus anything preloaded - and tells the WebTorrent process. A
    * torrent nothing is wanted from goes back to sleep.
