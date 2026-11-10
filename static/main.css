@@ -1433,3 +1433,46 @@ video::-webkit-media-text-track-container {
   stroke: #ff4081;
   transition: stroke-dashoffset 0.3s linear;
 }
+
+/*
+ * The search box over an open torrent's files, opened with Ctrl+F
+ */
+.torrent-details .find-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background: rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.torrent-details .find-bar .icon {
+  font-size: 18px;
+  opacity: 0.6;
+  position: static;
+  top: auto;
+}
+
+.torrent-details .find-bar .find-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #eee;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.torrent-details .find-bar .find-count {
+  font-size: 12px;
+  opacity: 0.6;
+  white-space: nowrap;
+}
+
+.torrent-details .find-bar .find-close {
+  cursor: pointer;
+}
+
+.torrent-details .find-bar .find-close:hover {
+  opacity: 1;
+}

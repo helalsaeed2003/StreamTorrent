@@ -296,6 +296,17 @@ const dispatchHandlers = {
     controllers.torrentList().confirmDeleteAllTorrents(deleteData),
   deleteAllTorrents: (deleteData) =>
     controllers.torrentList().deleteAllTorrents(deleteData),
+  toggleFind: () => {
+    // Only worth anything while a torrent is open: it searches that torrent
+    if (!state.selectedInfoHash) return
+    state.find.active = !state.find.active
+    if (!state.find.active) state.find.query = ''
+  },
+  setFindQuery: (query) => { state.find.query = query },
+  closeFind: () => {
+    state.find.active = false
+    state.find.query = ''
+  },
   toggleSelectTorrent: (infoHash) =>
     controllers.torrentList().toggleSelectTorrent(infoHash),
   toggleFolder: (infoHash, folderKey) =>
@@ -490,7 +501,9 @@ function backToList () {
 
 // Quits modals, full screen, or goes back. Happens when the user hits ESC
 function escapeBack () {
-  if (state.modal) {
+  if (state.find.active) {
+    dispatch('closeFind')
+  } else if (state.modal) {
     dispatch('exitModal')
   } else if (state.window.isFullScreen) {
     dispatch('toggleFullScreen')
@@ -648,10 +661,19 @@ function onDocumentClick (e) {
 }
 
 function onKeydown (e) {
+  const key = e.key
+
+  // Ctrl+F searches the open torrent. It works from inside the search box
+  // too, where it closes it again.
+  if ((e.ctrlKey || e.metaKey) && key.toLowerCase() === 'f') {
+    e.preventDefault()
+    dispatch('toggleFind')
+    update()
+    return
+  }
+
   // prevent event fire on user input elements
   if (editableHtmlTags.has(e.target.tagName.toLowerCase())) return
-
-  const key = e.key
 
   // In the image viewer, the arrow keys step through the images in the folder
   if (state.location.url() === 'player' && state.playing.type === 'image') {

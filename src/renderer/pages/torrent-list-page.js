@@ -276,6 +276,7 @@ module.exports = class TorrentList extends React.Component {
   // Only open folders are rendered, so a torrent with thousands of files costs
   // no more to draw than a torrent with ten.
   renderTorrentDetails (torrentSummary) {
+    const state = this.props.state
     let filesElement
     if (torrentSummary.error || !torrentSummary.files) {
       let message = ''
@@ -298,10 +299,13 @@ module.exports = class TorrentList extends React.Component {
         </div>
       )
     } else {
-      // We do know the files. Lay them out as a folder tree.
-      const sortByName = this.props.state.saved.prefs.sortByName
-      const tree = FileTree.getTree(torrentSummary, sortByName)
-      const rows = this.renderTreeRows(torrentSummary, tree, 0, [])
+      // Searching shows the files that match wherever they are, with the
+      // folders they are in; otherwise the files are laid out as a tree
+      const query = state.find.active ? state.find.query.trim() : ''
+      const rows = query
+        ? this.renderSearchRows(torrentSummary, query)
+        : this.renderTreeRows(torrentSummary, FileTree.getTree(
+          torrentSummary, state.saved.prefs.sortByName), 0, [])
 
       filesElement = (
         <div key='files' className='files'>
@@ -316,9 +320,74 @@ module.exports = class TorrentList extends React.Component {
 
     return (
       <div key='details' className='torrent-details'>
+        {this.renderFindBar(torrentSummary)}
         {filesElement}
       </div>
     )
+  }
+
+  /**
+   * The search box, opened with Ctrl+F. It looks through the files of the
+   * torrent that is open, by name and by the folder they are in.
+   */
+  renderFindBar (torrentSummary) {
+    const state = this.props.state
+    if (!state.find.active) return null
+
+    const query = state.find.query.trim()
+    const matches = query ? matchingFiles(torrentSummary, query).length : null
+
+    return (
+      <div key='find' className='find-bar'>
+        <i className='icon'>search</i>
+        <input
+          className='find-input'
+          type='text'
+          autoFocus
+          placeholder='Search this torrent'
+          value={state.find.query}
+          onChange={(e) => dispatch('setFindQuery', e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') dispatch('closeFind')
+            e.stopPropagation()
+          }}
+        />
+        <span className='find-count'>
+          {matches == null
+            ? ''
+            : matches === 1 ? '1 file' : matches + ' files'}
+        </span>
+        <i
+          className='icon find-close'
+          title='Close the search'
+          role='button'
+          onClick={dispatcher('closeFind')}
+        >
+          close
+        </i>
+      </div>
+    )
+  }
+
+  // The rows shown while searching: every file that matches, wherever it is
+  renderSearchRows (torrentSummary, query) {
+    const matches = matchingFiles(torrentSummary, query)
+
+    if (matches.length === 0) {
+      return [(
+        <tr key='no-matches' className='file-row disabled'>
+          <td className='col-icon' />
+          <td className='col-name'>Nothing in this torrent matches</td>
+          <td className='col-progress' />
+          <td className='col-size' />
+          <td className='col-preload' />
+          <td className='col-select' />
+        </tr>
+      )]
+    }
+
+    return matches.map(({ file, index }) =>
+      this.renderFileRow(torrentSummary, file, index, 0))
   }
 
   // Walks the folder tree and collects the rows that are currently visible:
@@ -641,6 +710,26 @@ function getErrorMessage (torrentSummary) {
     )
   }
   return 'Error'
+}
+
+/**
+ * The files of a torrent that match what was typed into the search box.
+ *
+ * Every word has to appear somewhere in the file's path, so "pmv aard" finds
+ * "Aardstyle/In Our Heads PMV.mp4" however the words are ordered.
+ */
+function matchingFiles (torrentSummary, query) {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean)
+  if (words.length === 0) return []
+
+  const matches = []
+  ;(torrentSummary.files || []).forEach((file, index) => {
+    if (FileTree.isPaddingFile(file)) return
+    const haystack = (file.path || file.name || '').toLowerCase()
+    if (words.every(word => haystack.includes(word))) matches.push({ file, index })
+  })
+
+  return matches
 }
 
 // Every video or image inside a folder, however deeply nested

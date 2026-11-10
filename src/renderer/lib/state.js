@@ -63,6 +63,8 @@ function getDefaultState () {
      * back exactly as the user left it: same scroll position, same open folders.
      */
     listScrollTop: 0, /* scroll position of the torrent list */
+    /* the search box over the open torrent's files, opened with Ctrl+F */
+    find: { active: false, query: '' },
     lastPlayed: null, /* {infoHash, fileIndex} of the file played most recently */
     streaming: null, /* {infoHash, fileIndex} of the file being downloaded now */
     tempPath: null, /* the temp folder actually in use, once checked */
