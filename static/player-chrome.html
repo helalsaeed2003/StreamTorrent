@@ -5,44 +5,47 @@
   <title>StreamTorrent player bars</title>
   <link rel="stylesheet" href="main.css">
   <style>
+    /*
+     * One bar per window, each window only as tall as its bar. The window
+     * itself is made see-through with setOpacity, so what is drawn here is
+     * solid.
+     */
     html, body {
       margin: 0;
       padding: 0;
       height: 100%;
-      background: transparent;
       overflow: hidden;
+      background: #101010;
     }
 
-    /* Only the bars are drawn here; everything between them is the video */
-    .app, .player {
+    body.part-controls {
+      /* The strip above the controls, where the time shows while scrubbing,
+         belongs to the picture rather than to the bar */
       background: transparent;
     }
 
     .player .controls {
-      background: rgba(20, 20, 20, 0.72);
+      background: #101010;
     }
 
     .chrome-header {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 38px;
       display: flex;
       align-items: center;
       gap: 10px;
-      padding: 0 10px;
-      background: rgba(20, 20, 20, 0.72);
+      height: 100%;
+      padding: 0 12px;
+      box-sizing: border-box;
       color: #eee;
       font-family: Segoe UI, Helvetica Neue, sans-serif;
       font-size: 14px;
-      transition: opacity 0.15s ease-out;
     }
 
     .chrome-header .icon {
       cursor: pointer;
       font-size: 22px;
       opacity: 0.9;
+      position: static;
+      top: auto;
     }
 
     .chrome-header .title {
@@ -62,10 +65,6 @@
       font-size: 13px;
       text-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
       font-family: Segoe UI, Helvetica Neue, sans-serif;
-    }
-
-    .app.hide-video-controls .chrome-header {
-      opacity: 0;
     }
   </style>
 </head>

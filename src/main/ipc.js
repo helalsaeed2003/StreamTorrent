@@ -99,10 +99,6 @@ function init () {
     windows.playerChrome.hide()
   })
 
-  ipcMain.on('player-chrome-mouse', (e, overBars) => {
-    windows.playerChrome.setMouseOverBars(!!overBars)
-  })
-
   ipcMain.on('player-chrome-action', (e, action, args) => {
     if (!windows.playerChrome.isOpen()) return
     windows.main.dispatch(action, ...(args || []))

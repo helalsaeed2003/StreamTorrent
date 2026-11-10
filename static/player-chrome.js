@@ -8,16 +8,23 @@
 
 const { ipcRenderer } = require('electron')
 
+// Which bar this window is drawing: the header at the top, or the controls at
+// the bottom
+const part = new URLSearchParams(window.location.search).get('part') || 'controls'
+document.body.classList.add('part-' + part)
+
+const headerBar = document.getElementById('header')
+const controlsBar = document.getElementById('controls')
+
+if (part === 'header') controlsBar.remove()
+else headerBar.remove()
+
 const app = document.getElementById('app')
-const controls = document.getElementById('controls')
+const controls = controlsBar
 const titleText = document.getElementById('title')
 
 // What the page last told us
 let shown = {}
-
-// Whether the pointer is over one of the bars. While it is, this window takes
-// the mouse; the rest of the time every click goes through to the video.
-let overBars = false
 
 // While the seek bar is being dragged, the time under the pointer
 let scrubbing = null
@@ -59,6 +66,8 @@ function formatTime (seconds, total) {
 const parts = {}
 
 function build () {
+  if (part === 'header') return buildHeader()
+
   // The seek bar, and the time shown while the pointer runs along it
   parts.preview = el('div', 'scrub-preview')
   parts.preview.style.display = 'none'
@@ -126,26 +135,21 @@ function build () {
   controls.appendChild(parts.captions)
   controls.appendChild(parts.audio)
 
-  document.getElementById('back').addEventListener('click', () => act('backToList'))
+  listen()
+}
 
-  // Moving the mouse keeps the bars awake, and decides whether this window
-  // takes the mouse or lets it through
-  window.addEventListener('mousemove', onMouseMove)
+// The header is just the way back and the name of what is playing
+function buildHeader () {
+  document.getElementById('back').addEventListener('click', () => act('backToList'))
+  listen()
+}
+
+function listen () {
+  // The pointer being on a bar keeps the bars up
+  window.addEventListener('mousemove', () => act('mediaMouseMoved', true))
   window.addEventListener('wheel', e => {
     act('changeVolume', (-e.deltaY | e.deltaX) / 500)
   })
-}
-
-function onMouseMove (e) {
-  const onBar = !!(e.target && e.target.closest &&
-    e.target.closest('.controls, .chrome-header'))
-
-  if (onBar !== overBars) {
-    overBars = onBar
-    ipcRenderer.send('player-chrome-mouse', onBar)
-  }
-
-  act('mediaMouseMoved', onBar)
 }
 
 function fractionAt (x) {
@@ -174,7 +178,10 @@ function draw (data) {
   app.className = 'app view-player is-win32' +
     (shown.visible ? '' : ' hide-video-controls')
 
-  titleText.textContent = shown.title || ''
+  if (part === 'header') {
+    titleText.textContent = shown.title || ''
+    return
+  }
 
   const fraction = shown.duration > 0 ? shown.currentTime / shown.duration : 0
   parts.cursor.style.left = 'calc(' + (fraction * 100) + '% - 3px)'
