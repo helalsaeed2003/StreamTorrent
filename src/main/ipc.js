@@ -104,10 +104,10 @@ function init () {
     windows.main.dispatch(action, ...(args || []))
   })
 
-  // The pointer has reached the seek bar, or left it: the bar makes room for
-  // the time under the pointer while it is there
-  ipcMain.on('player-chrome-hover', (e, on) => {
-    windows.playerChrome.setHovering(on)
+  // Where the pointer is on the seek bar, and the time there: shown just above
+  // the bar while the pointer is on it
+  ipcMain.on('player-chrome-hover', (e, data) => {
+    windows.playerChrome.setHovering(data)
   })
 
   // A bar was pressed. The bars themselves never take focus, so bring the app

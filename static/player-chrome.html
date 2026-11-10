@@ -70,36 +70,57 @@
     }
 
     /*
-     * While the pointer is on it the window itself grows upwards, so the
-     * handle and the time have room without anything covering the picture the
-     * rest of the time.
+     * The bar thickens under the pointer by growing downwards, into itself, so
+     * its top edge never moves and the bar never changes size.
      */
     .player .playback-bar:hover .loading-bar {
-      top: -8px;
-      height: 8px;
+      top: -6px;
+      height: 10px;
     }
 
     .player .playback-bar:hover .playback-cursor {
-      top: -13px;
-      margin-left: -9px;
-      width: 18px;
-      height: 18px;
+      top: -6px;
+      margin-left: -6px;
+      width: 12px;
+      height: 12px;
     }
 
-    /* The time under the pointer, in the room the bar has just made */
-    .player .controls .scrub-preview {
+    /*
+     * The time under the pointer, in a window of its own above the bar. Its
+     * window is see-through, so only the label itself is drawn.
+     */
+    body.part-preview {
+      background: transparent;
+    }
+
+    .scrub-tip {
       position: absolute;
-      bottom: 52px;
-      width: 64px;
-      height: 24px;
-      line-height: 24px;
-      margin-left: -32px;
+      left: 0;
+      right: 0;
+      top: 0;
+      height: 26px;
+      line-height: 26px;
       text-align: center;
       color: #fff;
       font-size: 13px;
       font-variant-numeric: tabular-nums;
-      pointer-events: none;
       font-family: Segoe UI, Helvetica Neue, sans-serif;
+      background: rgba(0, 0, 0, 0.85);
+      border-radius: 4px;
+    }
+
+    /* The point at the bottom, resting on the seek bar */
+    .scrub-tip::after {
+      content: '';
+      position: absolute;
+      top: 26px;
+      left: 50%;
+      margin-left: -6px;
+      width: 0;
+      height: 0;
+      border-left: 6px solid transparent;
+      border-right: 6px solid transparent;
+      border-top: 7px solid rgba(0, 0, 0, 0.85);
     }
   </style>
 </head>
@@ -113,6 +134,7 @@
       <div class="controls" id="controls"></div>
     </div>
   </div>
+  <div class="scrub-tip" id="tip"></div>
   <script>require('./player-chrome.js')</script>
 </body>
 </html>

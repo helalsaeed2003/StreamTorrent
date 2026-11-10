@@ -32,21 +32,58 @@ const log = require('./../log')
 
 // How see-through the bars are, and how tall the one at the bottom is: the
 // controls themselves plus the seek bar along their top edge. Nothing more, so
-// no dark strip is left standing over the picture. While the pointer is on the
-// seek bar it grows upwards, to make room for the time under the pointer and
-// for the larger grab handle.
+// no dark strip is left standing over the picture, and the bar never changes
+// size under the pointer.
 const OPACITY = 0.88
 const BOTTOM_HEIGHT = config.UI_PLAYER_CONTROLS_HEIGHT
-const HOVER_HEIGHT = BOTTOM_HEIGHT + config.UI_PLAYER_PREVIEW_HEIGHT
+
+// The time under the pointer floats in a small window of its own, which is
+// see-through everywhere except the label itself
+const PREVIEW_WIDTH = 96
+const PREVIEW_HEIGHT = config.UI_PLAYER_PREVIEW_HEIGHT
 
 let open = false
-let hovering = false
 
-// The pointer is on the seek bar, or has left it
-function setHovering (on) {
-  if (hovering === !!on) return
-  hovering = !!on
-  sync()
+/**
+ * The pointer is on the seek bar, or has left it. While it is there, the time
+ * under it is shown just above the bar, in a window of its own: the bar itself
+ * keeps its size, so nothing jumps and nothing else covers the picture.
+ */
+function setHovering (data) {
+  const win = previewWindow()
+  if (!win) return
+
+  if (!open || !data || !data.on) {
+    if (win.isVisible()) win.hide()
+    return
+  }
+
+  const main = require('./main').win
+  if (!main || main.isDestroyed()) return
+
+  const area = main.getContentBounds()
+  const wanted = Math.round(area.x + (data.x || 0) - PREVIEW_WIDTH / 2)
+  const limit = area.x + area.width - PREVIEW_WIDTH - 4
+
+  win.setBounds({
+    x: Math.max(area.x + 4, Math.min(wanted, limit)),
+    // Sitting on the bar, so its point touches the seek bar
+    y: area.y + area.height - BOTTOM_HEIGHT - PREVIEW_HEIGHT + 2,
+    width: PREVIEW_WIDTH,
+    height: PREVIEW_HEIGHT
+  })
+
+  const send = () => win.webContents.send('player-chrome-preview', data.text || '')
+  if (win.webContents.isLoading()) win.webContents.once('did-finish-load', send)
+  else send()
+
+  if (!win.isVisible()) win.showInactive()
+  win.moveTop()
+}
+
+function previewWindow () {
+  const win = create('preview')
+  return win && !win.isDestroyed() ? win : null
 }
 
 function isOpen () {
@@ -59,6 +96,10 @@ function create (part) {
 
   const main = require('./main').win
   if (!main || main.isDestroyed()) return null
+
+  // The time under the pointer is a label with a point at the bottom, so its
+  // window has to be see-through around it rather than a dark rectangle
+  const floating = part === 'preview'
 
   const win = new BrowserWindow({
     parent: main,
@@ -74,7 +115,8 @@ function create (part) {
     // Never take focus: the keyboard stays with the main window, so the app's
     // hotkeys keep working while a video plays
     focusable: false,
-    backgroundColor: '#101010',
+    transparent: floating,
+    backgroundColor: floating ? '#00000000' : '#101010',
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -84,7 +126,8 @@ function create (part) {
 
   playerChrome.windows[part] = win
   win.setMenuBarVisibility(false)
-  win.setOpacity(OPACITY)
+  if (floating) win.setIgnoreMouseEvents(true)
+  else win.setOpacity(OPACITY)
   win.loadURL('file://' + path.join(config.STATIC_PATH, 'player-chrome.html') +
     '?part=' + part)
 
@@ -122,25 +165,25 @@ function show (payload) {
 
   // The bars come and go with the pointer: when they are not wanted, the
   // windows are taken away altogether, so nothing covers the picture
-  if (payload && payload.visible) {
-    sync()
-    showWindows()
-  } else {
-    hovering = false
-    sync()
-    hideWindows()
-  }
+  sync()
+  if (payload && payload.visible) showWindows()
+  else hideWindows()
 }
 
 function hide () {
   open = false
-  hovering = false
   hideWindows()
 }
 
+// The two bars. The time under the pointer comes and goes on its own.
+function bars () {
+  return ['header', 'controls']
+    .map(part => playerChrome.windows[part])
+    .filter(win => win && !win.isDestroyed())
+}
+
 function showWindows () {
-  for (const win of Object.values(playerChrome.windows)) {
-    if (!win || win.isDestroyed()) continue
+  for (const win of bars()) {
     if (!win.isVisible()) win.showInactive()
     win.moveTop()
   }
@@ -168,13 +211,11 @@ function sync () {
     height: config.UI_HEADER_HEIGHT
   })
 
-  const bottom = hovering ? HOVER_HEIGHT : BOTTOM_HEIGHT
-
   place('controls', {
     x: area.x,
-    y: area.y + area.height - bottom,
+    y: area.y + area.height - BOTTOM_HEIGHT,
     width: area.width,
-    height: bottom
+    height: BOTTOM_HEIGHT
   })
 
   // Moving the main window, and showing the video window with it, puts the
@@ -187,8 +228,7 @@ function sync () {
 // window is shown or restored
 function raise () {
   if (!open) return
-  for (const win of Object.values(playerChrome.windows)) {
-    if (!win || win.isDestroyed()) continue
+  for (const win of bars()) {
     if (win.isVisible()) win.moveTop()
   }
 }

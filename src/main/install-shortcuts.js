@@ -29,7 +29,9 @@ function available () {
 
 function run (args) {
   try {
-    spawn(UPDATE_EXE, args, { detached: true, windowsHide: true })
+    const child = spawn(UPDATE_EXE, args, { detached: true, windowsHide: true })
+    child.on('exit', code => log('Update.exe ' + args.join(' ') + ' finished with ' + code))
+    child.on('error', err => log('could not run Update.exe', err))
   } catch (err) {
     log('could not run Update.exe', err)
   }
@@ -101,8 +103,18 @@ function apply (choice, win) {
 
   log('shortcuts kept: ' + (wanted.join(',') || 'none'))
 
-  // The page owns the preferences, and setting this one from there is what
-  // registers or unregisters the handlers
+  // Registered here rather than left to the page: what was asked for happens
+  // whether or not the page is listening by now
+  const handlers = require('./handlers')
+  try {
+    if (choice.fileHandler) handlers.install()
+    else handlers.uninstall()
+    log('torrent files and magnet links: ' + (choice.fileHandler ? 'ours' : 'left alone'))
+  } catch (err) {
+    log('could not register the handlers', err)
+  }
+
+  // The page keeps the preference, so Preferences shows what was chosen
   if (win && !win.isDestroyed()) {
     win.webContents.send('dispatch', 'updatePreferences', 'isFileHandler',
       !!choice.fileHandler)

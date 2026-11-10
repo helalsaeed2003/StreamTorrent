@@ -15,9 +15,16 @@ document.body.classList.add('part-' + part)
 
 const headerBar = document.getElementById('header')
 const controlsBar = document.getElementById('controls')
+const tip = document.getElementById('tip')
 
-if (part === 'header') controlsBar.remove()
-else headerBar.remove()
+// Each window keeps only its own half of the page
+if (part === 'preview') {
+  document.getElementById('app').remove()
+} else {
+  tip.remove()
+  if (part === 'header') controlsBar.remove()
+  else headerBar.remove()
+}
 
 const app = document.getElementById('app')
 const controls = controlsBar
@@ -30,6 +37,7 @@ let shown = {}
 let scrubbing = null
 
 ipcRenderer.on('player-chrome-data', (e, data) => draw(data))
+ipcRenderer.on('player-chrome-preview', (e, text) => { tip.textContent = text })
 
 function act (action, ...args) {
   ipcRenderer.send('player-chrome-action', action, args)
@@ -66,12 +74,8 @@ function formatTime (seconds, total) {
 const parts = {}
 
 function build () {
+  if (part === 'preview') return
   if (part === 'header') return buildHeader()
-
-  // The seek bar, and the time shown while the pointer runs along it
-  parts.preview = el('div', 'scrub-preview')
-  parts.preview.style.display = 'none'
-  controls.appendChild(parts.preview)
 
   const bar = el('div', 'playback-bar')
   parts.loading = el('div', 'loading-bar')
@@ -87,13 +91,11 @@ function build () {
 
   parts.scrub.addEventListener('mousemove', e => {
     scrubbing = fractionAt(e.clientX)
-    hover(true)
     drawPreview()
   })
   parts.scrub.addEventListener('mouseout', () => {
     scrubbing = null
     hover(false)
-    drawPreview()
   })
   parts.scrub.addEventListener('mousedown', e => {
     act('skipTo', fractionAt(e.clientX) * (shown.duration || 0))
@@ -177,16 +179,13 @@ function listen () {
   })
 }
 
-// The bar grows upwards while the pointer is on the seek bar, to make room for
-// the time under the pointer. The window is resized by the main process; the
-// class tells the page it has that room.
+// Whether the time under the pointer is showing
 let hovering = false
 
 function hover (on) {
   if (hovering === !!on) return
   hovering = !!on
-  document.body.classList.toggle('hovering-scrub', hovering)
-  ipcRenderer.send('player-chrome-hover', hovering)
+  ipcRenderer.send('player-chrome-hover', { on: hovering })
 }
 
 function fractionAt (x) {
@@ -194,21 +193,26 @@ function fractionAt (x) {
   return Math.max(0, Math.min(1, x / width))
 }
 
+/**
+ * Tells the main process where the pointer is on the seek bar and what the
+ * time there is. It shows that in a small window just above the bar, so the
+ * bar itself never has to make room and never changes size.
+ */
 function drawPreview () {
   const duration = shown.duration || 0
+
   if (scrubbing == null || !duration) {
-    parts.preview.style.display = 'none'
+    hover(false)
     return
   }
 
   const width = document.body.clientWidth || 1
-  const time = scrubbing * duration
-  parts.preview.style.display = ''
-  // The pill is centred on the pointer by its own margin, and kept inside the
-  // window at either end
-  parts.preview.style.left =
-    Math.min(Math.max(scrubbing * width, 33), width - 33) + 'px'
-  parts.preview.textContent = formatTime(time, duration)
+  ipcRenderer.send('player-chrome-hover', {
+    on: true,
+    x: Math.round(scrubbing * width),
+    text: formatTime(scrubbing * duration, duration)
+  })
+  hovering = true
 }
 
 function draw (data) {

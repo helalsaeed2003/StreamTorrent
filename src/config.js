@@ -122,10 +122,9 @@ module.exports = {
   // so no dark strip is left standing over the picture.
   UI_PLAYER_CONTROLS_HEIGHT: UI_HEADER_HEIGHT + 6,
 
-  // How much taller the bar becomes while the pointer is on the seek bar: room
-  // for the time under the pointer and for the larger grab handle. It is only
-  // there while the pointer is, so the rest of the time nothing covers the
-  // picture above the seek bar.
+  // How tall the label showing the time under the pointer is, with the point
+  // at its bottom. It floats in a window of its own just above the seek bar,
+  // so the bar itself never changes size.
   UI_PLAYER_PREVIEW_HEIGHT: 34
 }
 
