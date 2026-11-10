@@ -427,6 +427,41 @@ module.exports = class TorrentListController {
     sound.play('DELETE')
   }
 
+  /**
+   * Finishes a drag: the torrent being dragged is moved to where it was let
+   * go, and the new order is saved.
+   */
+  dropTorrent () {
+    const state = this.state
+    const moving = state.draggingTorrent
+    const before = state.dropBefore
+    const after = state.dropAfter
+
+    state.draggingTorrent = null
+    state.dropBefore = null
+    state.dropAfter = null
+
+    const target = before || after
+    if (!moving || !target || moving === target) return
+
+    const torrents = state.saved.torrents
+    const from = torrents.findIndex(t => t.infoHash === moving)
+    if (from < 0) return
+
+    const [torrent] = torrents.splice(from, 1)
+
+    let to = torrents.findIndex(t => t.infoHash === target)
+    if (to < 0) {
+      // The one it was dropped on has gone: put it back where it was
+      torrents.splice(from, 0, torrent)
+      return
+    }
+    if (after) to += 1
+
+    torrents.splice(to, 0, torrent)
+    dispatch('stateSave')
+  }
+
   toggleSelectTorrent (infoHash) {
     if (this.state.selectedInfoHash === infoHash) {
       this.state.selectedInfoHash = null
@@ -453,6 +488,12 @@ module.exports = class TorrentListController {
     const sortedByName = this.state.saved.prefs.sortByName
 
     showContextMenu([
+      {
+        label: 'Find in This Torrent',
+        action: 'findInTorrent',
+        args: [torrentSummary.infoHash]
+      },
+      { type: 'separator' },
       {
         label: 'Remove From List',
         action: 'confirmDeleteTorrent',

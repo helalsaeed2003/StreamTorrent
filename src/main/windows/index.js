@@ -1,5 +1,6 @@
 exports.about = require('./about')
 exports.main = require('./main')
 exports.playerMenu = require('./player-menu')
+exports.playerChrome = require('./player-chrome')
 exports.video = require('./video')
 exports.webtorrent = require('./webtorrent')

@@ -36,6 +36,7 @@ const sound = require('./lib/sound')
 const TorrentPlayer = require('./lib/torrent-player')
 const MpvPlayer = require('./lib/mpv-player')
 const PlayerMenu = require('./lib/player-menu')
+const PlayerChrome = require('./lib/player-chrome')
 const { showContextMenu } = require('./lib/context-menu')
 
 // Perf optimization: Needed immediately, so do not lazy load it below
@@ -246,6 +247,10 @@ function update () {
   // The speed, subtitle and audio menus are drawn in a window of their own,
   // over the video, so they are told from here what to show
   PlayerMenu.sync(state)
+
+  // The header and the controls are drawn over the video, in a window of
+  // their own, for the same reason
+  PlayerChrome.sync(state)
   updateElectron()
 }
 
@@ -302,6 +307,22 @@ const dispatchHandlers = {
     if (!state.selectedInfoHash) return
     state.find.active = !state.find.active
     if (!state.find.active) state.find.query = ''
+  },
+  startDraggingTorrent: (infoHash) => {
+    state.draggingTorrent = infoHash
+  },
+  dragTorrentOver: (infoHash, below) => {
+    state.dropBefore = below ? null : infoHash
+    state.dropAfter = below ? infoHash : null
+  },
+  dropTorrent: () => controllers.torrentList().dropTorrent(),
+  findInTorrent: (infoHash) => {
+    // Opens that torrent, if it is not open already, and searches inside it
+    if (state.selectedInfoHash !== infoHash) {
+      controllers.torrentList().toggleSelectTorrent(infoHash)
+    }
+    state.find.active = true
+    state.find.query = ''
   },
   setFindQuery: (query) => { state.find.query = query },
   openTextContextMenu: () => showContextMenu([
@@ -383,7 +404,7 @@ const dispatchHandlers = {
   mediaError: (err) => controllers.media().mediaError(err),
   mediaSuccess: () => controllers.media().mediaSuccess(),
   mediaTimeUpdate: () => controllers.media().mediaTimeUpdate(),
-  mediaMouseMoved: () => controllers.media().mediaMouseMoved(),
+  mediaMouseMoved: (inControls) => controllers.media().mediaMouseMoved(inControls),
   mediaControlsMouseEnter: () => controllers.media().controlsMouseEnter(),
   mediaControlsMouseLeave: () => controllers.media().controlsMouseLeave(),
 
@@ -429,6 +450,8 @@ const dispatchHandlers = {
   onOpen,
   error: onError,
   uncaughtError: (proc, err) => telemetry.logUncaughtError(proc, err),
+  checkForUpdates: () =>
+    ipcRenderer.send('checkForUpdates', state.saved.prefs.updateFolder),
   stateSave: () => State.save(state),
   stateSaveImmediate: () => {
     // Quitting mid-video still records where we got to
@@ -510,7 +533,9 @@ function backToList () {
 
 // Quits modals, full screen, or goes back. Happens when the user hits ESC
 function escapeBack () {
-  if (state.find.active) {
+  // The search belongs to the list. While a video is playing, Escape leaves
+  // the video, and the search is still there when the list comes back.
+  if (state.find.active && state.location.url() !== 'player') {
     dispatch('closeFind')
   } else if (state.modal) {
     dispatch('exitModal')

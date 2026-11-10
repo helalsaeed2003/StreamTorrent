@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>StreamTorrent player bars</title>
+  <link rel="stylesheet" href="main.css">
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: transparent;
+      overflow: hidden;
+    }
+
+    /* Only the bars are drawn here; everything between them is the video */
+    .app, .player {
+      background: transparent;
+    }
+
+    .player .controls {
+      background: rgba(20, 20, 20, 0.72);
+    }
+
+    .chrome-header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 38px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 10px;
+      background: rgba(20, 20, 20, 0.72);
+      color: #eee;
+      font-family: Segoe UI, Helvetica Neue, sans-serif;
+      font-size: 14px;
+      transition: opacity 0.15s ease-out;
+    }
+
+    .chrome-header .icon {
+      cursor: pointer;
+      font-size: 22px;
+      opacity: 0.9;
+    }
+
+    .chrome-header .title {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      opacity: 0.9;
+    }
+
+    /* The time shown while the pointer runs along the seek bar */
+    .player .controls .scrub-preview {
+      position: absolute;
+      bottom: 46px;
+      width: 86px;
+      text-align: center;
+      color: #eee;
+      font-size: 13px;
+      text-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
+      font-family: Segoe UI, Helvetica Neue, sans-serif;
+    }
+
+    .app.hide-video-controls .chrome-header {
+      opacity: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="app view-player is-win32" id="app">
+    <div class="player mpv-player">
+      <div class="chrome-header" id="header">
+        <i class="icon" id="back" title="Back to the list">chevron_left</i>
+        <span class="title" id="title"></span>
+      </div>
+      <div class="controls" id="controls"></div>
+    </div>
+  </div>
+  <script>require('./player-chrome.js')</script>
+</body>
+</html>

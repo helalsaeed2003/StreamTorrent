@@ -276,6 +276,26 @@ class PreferencesPage extends React.Component {
     )
   }
 
+  // Where new builds are kept: the folder holding RELEASES and the .nupkg
+  // files that bin/package.js writes
+  updateFolderSelector () {
+    const updateFolder = this.props.state.saved.prefs.updateFolder || ''
+
+    return (
+      <Preference>
+        <PathSelector
+          dialog={{
+            title: 'Choose the folder new builds are kept in',
+            properties: ['openDirectory']
+          }}
+          onChange={(filePath) => dispatch('updatePreferences', 'updateFolder', filePath)}
+          title='New builds folder'
+          value={updateFolder}
+        />
+      </Preference>
+    )
+  }
+
   render () {
     const style = {
       color: colors.grey400,
@@ -297,6 +317,7 @@ class PreferencesPage extends React.Component {
           {this.setDefaultAppButton()}
         </PreferencesSection>
         <PreferencesSection title='General'>
+          {this.updateFolderSelector()}
           {this.setStartupCheckbox()}
           {this.soundNotificationsCheckbox()}
         </PreferencesSection>

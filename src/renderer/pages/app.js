@@ -70,7 +70,11 @@ class App extends React.Component {
     return (
       <MuiThemeProvider muiTheme={darkMuiTheme}>
         <div className={'app ' + cls.join(' ')}>
-          <Header state={state} />
+          {state.location.url() === 'player' &&
+           state.playing.type === 'video' &&
+           state.playing.location === 'local'
+            ? null
+            : <Header state={state} />}
           {this.getErrorPopover()}
           <div key='content' className='content'>{this.getView()}</div>
           {this.getModal()}

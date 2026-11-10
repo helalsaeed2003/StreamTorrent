@@ -83,6 +83,9 @@ module.exports = class TorrentList extends React.Component {
     // Foreground: name of the torrent, basic info like size, play button,
     // cast buttons if available, and delete
     const classes = ['torrent']
+    if (state.draggingTorrent === infoHash) classes.push('dragging')
+    if (state.dropBefore === infoHash) classes.push('drop-above')
+    if (state.dropAfter === infoHash) classes.push('drop-below')
     if (isSelected) classes.push('selected')
     if (!infoHash) classes.push('disabled')
     if (!torrentSummary.torrentKey) throw new Error('Missing torrentKey')
@@ -92,6 +95,25 @@ module.exports = class TorrentList extends React.Component {
         key={torrentSummary.torrentKey}
         style={style}
         className={classes.join(' ')}
+        draggable={!!infoHash}
+        onDragStart={(e) => {
+          e.dataTransfer.effectAllowed = 'move'
+          e.dataTransfer.setData('text/plain', '')
+          dispatch('startDraggingTorrent', infoHash)
+        }}
+        onDragOver={(e) => {
+          if (!state.draggingTorrent || state.draggingTorrent === infoHash) return
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'move'
+          const box = e.currentTarget.getBoundingClientRect()
+          const below = e.clientY > box.top + box.height / 2
+          dispatch('dragTorrentOver', infoHash, below)
+        }}
+        onDrop={(e) => {
+          e.preventDefault()
+          dispatch('dropTorrent')
+        }}
+        onDragEnd={dispatcher('dropTorrent')}
         onContextMenu={infoHash && dispatcher('openTorrentContextMenu', infoHash)}
         onClick={infoHash && dispatcher('toggleSelectTorrent', infoHash)}
       >

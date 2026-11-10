@@ -88,6 +88,27 @@ function init () {
   })
 
   /**
+   * The player's bars, which are drawn in a window of their own over the video
+   */
+
+  ipcMain.on('player-chrome-show', (e, payload) => {
+    windows.playerChrome.show(payload)
+  })
+
+  ipcMain.on('player-chrome-hide', () => {
+    windows.playerChrome.hide()
+  })
+
+  ipcMain.on('player-chrome-mouse', (e, overBars) => {
+    windows.playerChrome.setMouseOverBars(!!overBars)
+  })
+
+  ipcMain.on('player-chrome-action', (e, action, args) => {
+    if (!windows.playerChrome.isOpen()) return
+    windows.main.dispatch(action, ...(args || []))
+  })
+
+  /**
    * The player's own menus, which live in a window of their own so they can be
    * drawn over the video
    */
@@ -107,6 +128,11 @@ function init () {
   ipcMain.on('player-menu-action', (e, action, args) => {
     if (!windows.playerMenu.isOpen()) return
     windows.main.dispatch(action, ...(args || []))
+  })
+
+  // Looks in the folder the user keeps builds in, and swaps in a newer one
+  ipcMain.on('checkForUpdates', (e, folder) => {
+    require('./updater').checkForUpdates(folder)
   })
 
   /**

@@ -1,4 +1,5 @@
 const path = require('path')
+const os = require('os')
 const arch = require('arch')
 
 // Build scripts load this file with plain Node, where requiring electron throws
@@ -55,6 +56,12 @@ module.exports = {
   DELAYED_INIT: 3000 /* 3 seconds */,
 
   DEFAULT_DOWNLOAD_PATH: getDefaultDownloadPath(),
+
+  // Where new builds are looked for by Help > Check for a New Build. It is
+  // the folder bin/package.js writes RELEASES and the .nupkg files to, and
+  // the user can point it somewhere else in Preferences.
+  DEFAULT_UPDATE_FOLDER: path.join(getPath('downloads') || os.homedir(),
+    'StreamTorrent', 'dist'),
 
   IS_PORTABLE,
   IS_PRODUCTION,

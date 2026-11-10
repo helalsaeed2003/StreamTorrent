@@ -1476,3 +1476,16 @@ video::-webkit-media-text-track-container {
 .torrent-details .find-bar .find-close:hover {
   opacity: 1;
 }
+
+/* A torrent being dragged into a new place in the list */
+.torrent.dragging {
+  opacity: 0.5;
+}
+
+.torrent.drop-above {
+  box-shadow: inset 0 3px 0 0 #ff4081;
+}
+
+.torrent.drop-below {
+  box-shadow: inset 0 -3px 0 0 #ff4081;
+}

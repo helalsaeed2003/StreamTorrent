@@ -63,6 +63,10 @@ function getDefaultState () {
      * back exactly as the user left it: same scroll position, same open folders.
      */
     listScrollTop: 0, /* scroll position of the torrent list */
+    /* while a torrent is being dragged into a new place in the list */
+    draggingTorrent: null, /* infoHash of the torrent being dragged */
+    dropBefore: null, /* it would land above this one */
+    dropAfter: null, /* ...or below this one */
     /* the search box over the open torrent's files, opened with Ctrl+F */
     find: { active: false, query: '' },
     lastPlayed: null, /* {infoHash, fileIndex} of the file played most recently */
@@ -226,7 +230,7 @@ function shouldHidePlayerControls () {
 
   return this.location.url() === 'player' &&
     this.playing.mouseStationarySince !== 0 &&
-    new Date().getTime() - this.playing.mouseStationarySince > 2000 &&
+    new Date().getTime() - this.playing.mouseStationarySince > 1200 &&
     !this.playing.mouseInControls &&
     !this.playing.isPaused &&
     this.playing.location === 'local'
@@ -265,6 +269,9 @@ async function load (cb) {
     if (!saved.folderExpanded) saved.folderExpanded = {}
     if (!saved.prefs) saved.prefs = {}
     if (typeof saved.prefs.tempPath !== 'string') saved.prefs.tempPath = ''
+    if (typeof saved.prefs.updateFolder !== 'string') {
+      saved.prefs.updateFolder = config.DEFAULT_UPDATE_FOLDER
+    }
     if (!Array.isArray(saved.torrents)) saved.torrents = []
     if (!Array.isArray(saved.staleTempPaths)) saved.staleTempPaths = []
 

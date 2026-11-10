@@ -47,7 +47,9 @@ module.exports = class Player extends React.Component {
         {showVideo
           ? (isVideo ? renderMpvVideo(state) : renderMedia(state))
           : renderCastScreen(state)}
-        {showControls ? renderPlayerControls(state) : null}
+        {/* A video through mpv has its bars drawn over it, in a window of
+            their own: the page cannot draw on top of the picture */}
+        {showControls && !(isVideo && showVideo) ? renderPlayerControls(state) : null}
       </div>
     )
   }

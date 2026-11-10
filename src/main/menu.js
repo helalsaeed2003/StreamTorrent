@@ -302,6 +302,13 @@ function getMenuTemplate () {
       // No links out to any website: this build does not point anywhere online
       submenu: [
         {
+          label: 'Check for a New Build...',
+          click: () => windows.main.dispatch('checkForUpdates')
+        },
+        {
+          type: 'separator'
+        },
+        {
           label: 'About ' + config.APP_NAME,
           click: () => windows.about.init()
         }

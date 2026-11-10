@@ -28,7 +28,6 @@ module.exports = {
 
 const { ipcRenderer } = require('electron')
 
-const config = require('../../config')
 const { dispatch } = require('./dispatcher')
 
 // How close to the end of a video counts as having reached the end, in seconds
@@ -257,15 +256,10 @@ function indexOfTrack (tracks, id) {
  * and only gives the strip back while the controls are showing.
  */
 function insetsFor (state) {
-  const bottom = config.UI_PLAYER_CONTROLS_HEIGHT + config.UI_PLAYER_PREVIEW_HEIGHT
-
-  if (state.window.isFullScreen) {
-    return state.shouldHidePlayerControls()
-      ? { top: 0, bottom: 0 }
-      : { top: 0, bottom }
-  }
-
-  return { top: config.UI_HEADER_HEIGHT, bottom }
+  // The picture takes the whole window. The header and the controls are
+  // drawn over it, in a window of their own, so nothing has to be left free
+  // for them and the picture never changes size.
+  return { top: 0, bottom: 0 }
 }
 
 function open (state) {

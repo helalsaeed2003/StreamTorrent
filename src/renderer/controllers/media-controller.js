@@ -60,8 +60,11 @@ module.exports = class MediaController {
     }
   }
 
-  mediaMouseMoved () {
+  mediaMouseMoved (inControls) {
     this.state.playing.mouseStationarySince = new Date().getTime()
+    // The bars are drawn in a window of their own, which says when the
+    // pointer is resting on one of them
+    if (inControls !== undefined) this.state.playing.mouseInControls = !!inControls
   }
 
   controlsMouseEnter () {

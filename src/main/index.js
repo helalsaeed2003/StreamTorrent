@@ -48,9 +48,12 @@ if (config.IS_PRODUCTION) {
   process.env.NODE_ENV = 'production'
 }
 
+let justInstalled = false
+
 if (process.platform === 'win32') {
   const squirrelWin32 = require('./squirrel-win32')
   shouldQuit = squirrelWin32.handleEvent(argv[0])
+  justInstalled = argv.includes('--squirrel-firstrun')
   argv = argv.filter((arg) => !arg.includes('--squirrel'))
 }
 
@@ -102,6 +105,14 @@ function init () {
         windows.main.dispatch('stateSave')
       } catch (err) {}
     }, 60 * 1000)
+
+    // Straight after installing, ask which shortcuts to keep. Squirrel has
+    // made both by then, and anything not wanted is taken away again.
+    if (justInstalled) {
+      setTimeout(() => {
+        require('./install-shortcuts').askOnFirstRun(windows.main.win)
+      }, 2500)
+    }
 
     menu.init()
     windows.main.init(state, { hidden })
