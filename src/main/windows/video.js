@@ -93,12 +93,14 @@ function watch (main) {
   })
   main.on('restore', () => {
     if (video.win && !video.win.isDestroyed()) video.win.showInactive()
+    require('./player-chrome').raise()
   })
   main.on('hide', () => {
     if (video.win && !video.win.isDestroyed()) video.win.hide()
   })
   main.on('show', () => {
     if (video.win && !video.win.isDestroyed()) video.win.showInactive()
+    require('./player-chrome').raise()
   })
 }
 
@@ -127,6 +129,10 @@ function sync () {
     width: Math.max(1, bounds.width),
     height: Math.max(1, height)
   })
+
+  // The picture covers the whole window, so putting it back in its place can
+  // leave the bars underneath it. They take the clicks, so they go back on top
+  require('./player-chrome').raise()
 }
 
 // The native handle mpv needs for --wid

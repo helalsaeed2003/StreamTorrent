@@ -17,6 +17,8 @@ const playerChrome = module.exports = {
   show,
   hide,
   sync,
+  raise,
+  setHovering,
   isOpen,
   windows: {}
 }
@@ -29,12 +31,23 @@ const config = require('../../config')
 const log = require('./../log')
 
 // How see-through the bars are, and how tall the one at the bottom is: the
-// controls themselves plus the few pixels of headroom the seek bar needs.
-// Nothing more, so no dark strip is left standing over the picture.
+// controls themselves plus the seek bar along their top edge. Nothing more, so
+// no dark strip is left standing over the picture. While the pointer is on the
+// seek bar it grows upwards, to make room for the time under the pointer and
+// for the larger grab handle.
 const OPACITY = 0.88
 const BOTTOM_HEIGHT = config.UI_PLAYER_CONTROLS_HEIGHT
+const HOVER_HEIGHT = BOTTOM_HEIGHT + config.UI_PLAYER_PREVIEW_HEIGHT
 
 let open = false
+let hovering = false
+
+// The pointer is on the seek bar, or has left it
+function setHovering (on) {
+  if (hovering === !!on) return
+  hovering = !!on
+  sync()
+}
 
 function isOpen () {
   return open
@@ -107,16 +120,21 @@ function show (payload) {
     else send()
   }
 
-  sync()
-
   // The bars come and go with the pointer: when they are not wanted, the
   // windows are taken away altogether, so nothing covers the picture
-  if (payload && payload.visible) showWindows()
-  else hideWindows()
+  if (payload && payload.visible) {
+    sync()
+    showWindows()
+  } else {
+    hovering = false
+    sync()
+    hideWindows()
+  }
 }
 
 function hide () {
   open = false
+  hovering = false
   hideWindows()
 }
 
@@ -150,12 +168,29 @@ function sync () {
     height: config.UI_HEADER_HEIGHT
   })
 
+  const bottom = hovering ? HOVER_HEIGHT : BOTTOM_HEIGHT
+
   place('controls', {
     x: area.x,
-    y: area.y + area.height - BOTTOM_HEIGHT,
+    y: area.y + area.height - bottom,
     width: area.width,
-    height: BOTTOM_HEIGHT
+    height: bottom
   })
+
+  // Moving the main window, and showing the video window with it, puts the
+  // bars underneath. Clicks would then land on the page behind the picture
+  // instead of on the controls, so put them back on top every time.
+  raise()
+}
+
+// Keep the bars above the video window, which is raised whenever the main
+// window is shown or restored
+function raise () {
+  if (!open) return
+  for (const win of Object.values(playerChrome.windows)) {
+    if (!win || win.isDestroyed()) continue
+    if (win.isVisible()) win.moveTop()
+  }
 }
 
 function place (part, bounds) {

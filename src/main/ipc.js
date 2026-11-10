@@ -104,6 +104,21 @@ function init () {
     windows.main.dispatch(action, ...(args || []))
   })
 
+  // The pointer has reached the seek bar, or left it: the bar makes room for
+  // the time under the pointer while it is there
+  ipcMain.on('player-chrome-hover', (e, on) => {
+    windows.playerChrome.setHovering(on)
+  })
+
+  // A bar was pressed. The bars themselves never take focus, so bring the app
+  // forward, or a menu opened from one is put away as the focus settles
+  ipcMain.on('player-chrome-focus', () => {
+    const win = windows.main.win
+    if (!win || win.isDestroyed()) return
+    if (!win.isFocused()) win.focus()
+    windows.playerChrome.raise()
+  })
+
   /**
    * The player's own menus, which live in a window of their own so they can be
    * drawn over the video

@@ -75,6 +75,9 @@ function build () {
 
   const bar = el('div', 'playback-bar')
   parts.loading = el('div', 'loading-bar')
+  // The red part of the track: how much of the file is here to play
+  parts.loaded = el('div', 'loading-bar-part')
+  parts.loading.appendChild(parts.loaded)
   parts.cursor = el('div', 'playback-cursor')
   parts.scrub = el('div', 'scrub-bar')
   bar.appendChild(parts.loading)
@@ -84,10 +87,12 @@ function build () {
 
   parts.scrub.addEventListener('mousemove', e => {
     scrubbing = fractionAt(e.clientX)
+    hover(true)
     drawPreview()
   })
   parts.scrub.addEventListener('mouseout', () => {
     scrubbing = null
+    hover(false)
     drawPreview()
   })
   parts.scrub.addEventListener('mousedown', e => {
@@ -147,17 +152,41 @@ function buildHeader () {
 }
 
 function listen () {
+  // These windows never take focus, so the app can still be in the background
+  // when one of their buttons is pressed. Bring it forward first: a menu that
+  // opens while the app is not the active one is put away again the moment
+  // the focus settles, which looks like a button that does nothing.
+  window.addEventListener('mousedown', () => ipcRenderer.send('player-chrome-focus'), true)
+
   // The pointer being on a bar keeps the bars up
   window.addEventListener('mousemove', () => act('mediaMouseMoved', true))
 
   // ...and once it leaves, they are free to go again. Without this the bars
   // would stay up for good, since the picture below them is mpv's own window
   // and sends the page no events of its own
-  document.addEventListener('mouseleave', () => act('mediaMouseMoved', false))
+  document.addEventListener('mouseleave', () => {
+    act('mediaMouseMoved', false)
+    if (part === 'controls') {
+      scrubbing = null
+      hover(false)
+    }
+  })
   window.addEventListener('blur', () => act('mediaMouseMoved', false))
   window.addEventListener('wheel', e => {
     act('changeVolume', (-e.deltaY | e.deltaX) / 500)
   })
+}
+
+// The bar grows upwards while the pointer is on the seek bar, to make room for
+// the time under the pointer. The window is resized by the main process; the
+// class tells the page it has that room.
+let hovering = false
+
+function hover (on) {
+  if (hovering === !!on) return
+  hovering = !!on
+  document.body.classList.toggle('hovering-scrub', hovering)
+  ipcRenderer.send('player-chrome-hover', hovering)
 }
 
 function fractionAt (x) {
@@ -178,7 +207,7 @@ function drawPreview () {
   // The pill is centred on the pointer by its own margin, and kept inside the
   // window at either end
   parts.preview.style.left =
-    Math.min(Math.max(scrubbing * width, 35), width - 35) + 'px'
+    Math.min(Math.max(scrubbing * width, 33), width - 33) + 'px'
   parts.preview.textContent = formatTime(time, duration)
 }
 
@@ -195,7 +224,10 @@ function draw (data) {
 
   const fraction = shown.duration > 0 ? shown.currentTime / shown.duration : 0
   parts.cursor.style.left = 'calc(' + (fraction * 100) + '% - 3px)'
-  parts.loading.style.width = (shown.bufferedFraction || 0) * 100 + '%'
+  parts.loaded.style.width = (shown.bufferedFraction || 0) * 100 + '%'
+
+  // Nothing is under the pointer once the bars are gone
+  if (!shown.visible && hovering) hover(false)
 
   parts.playPause.textContent = shown.isPaused ? 'play_arrow' : 'pause'
   parts.previous.className = 'icon skip-previous float-left' +

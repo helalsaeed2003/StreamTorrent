@@ -118,15 +118,15 @@ module.exports = {
   UI_TORRENT_HEIGHT,
 
   // How tall the player's controls are, in pixels: the 38px bar at the bottom
-  // plus the 14px of the seek bar that sticks out above it (see
-  // ".player .controls .scrub-bar" in static/main.css). The video window is
-  // kept clear of this strip, so the seek bar can be seen and grabbed.
-  UI_PLAYER_CONTROLS_HEIGHT: UI_HEADER_HEIGHT + 14,
+  // plus the 6px seek bar, which sits flush along its top edge. Nothing else,
+  // so no dark strip is left standing over the picture.
+  UI_PLAYER_CONTROLS_HEIGHT: UI_HEADER_HEIGHT + 6,
 
-  // How much room is kept above the seek bar for the time that appears while
-  // scrubbing. It is always kept free, so the picture does not resize when the
-  // pointer touches the bar.
-  UI_PLAYER_PREVIEW_HEIGHT: 36
+  // How much taller the bar becomes while the pointer is on the seek bar: room
+  // for the time under the pointer and for the larger grab handle. It is only
+  // there while the pointer is, so the rest of the time nothing covers the
+  // picture above the seek bar.
+  UI_PLAYER_PREVIEW_HEIGHT: 34
 }
 
 function getConfigPath () {

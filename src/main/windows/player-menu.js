@@ -35,6 +35,10 @@ const MARGIN = 8
 let height = 200
 let open = false
 
+// When the menu last opened, and how long after that a lost focus is ignored
+let openedAt = 0
+const SETTLE_MS = 400
+
 function isOpen () {
   return open
 }
@@ -87,9 +91,13 @@ function watch (main) {
   main.on('minimize', hide)
   main.on('hide', hide)
 
-  // Looking at something else puts the menu away, as a menu should
+  // Looking at something else puts the menu away, as a menu should. Opening it
+  // can itself shuffle the focus about for a moment, though, and a menu that
+  // shuts the instant it opens looks like a button that does not work, so a
+  // blur right after opening is ignored.
   main.on('blur', () => {
     if (!open) return
+    if (Date.now() - openedAt < SETTLE_MS) return
     hide()
     main.webContents.send('player-menu-closed')
   })
@@ -99,6 +107,7 @@ function show (payload) {
   const win = create()
   if (!win) return
 
+  if (!open) openedAt = Date.now()
   open = true
   const send = () => win.webContents.send('player-menu-data', payload)
   if (win.webContents.isLoading()) win.webContents.once('did-finish-load', send)
