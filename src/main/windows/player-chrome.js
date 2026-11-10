@@ -28,11 +28,11 @@ const { BrowserWindow } = require('electron')
 const config = require('../../config')
 const log = require('./../log')
 
-// How see-through the bars are, and how much room the one at the bottom needs:
-// the controls themselves plus the strip above them where the time shows while
-// scrubbing
+// How see-through the bars are, and how tall the one at the bottom is: the
+// controls themselves plus the few pixels of headroom the seek bar needs.
+// Nothing more, so no dark strip is left standing over the picture.
 const OPACITY = 0.88
-const BOTTOM_HEIGHT = config.UI_PLAYER_CONTROLS_HEIGHT + config.UI_PLAYER_PREVIEW_HEIGHT
+const BOTTOM_HEIGHT = config.UI_PLAYER_CONTROLS_HEIGHT
 
 let open = false
 

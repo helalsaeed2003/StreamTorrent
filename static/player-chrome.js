@@ -116,7 +116,9 @@ function build () {
 
   parts.fullscreen = icon('fullscreen', 'fullscreen float-right', 'Full screen',
     () => act('toggleFullScreen'))
-  parts.speed = el('i', 'icon playback-rate float-right', '1x')
+  // Not an "icon": it says "1x", so it is drawn in the ordinary typeface and
+  // is not cut to the width of an icon
+  parts.speed = el('i', 'playback-rate float-right', '1x')
   parts.speed.title = 'Playback speed'
   parts.speed.addEventListener('click', () => act('togglePlaybackRateMenu'))
   parts.captions = icon('closed_caption', 'closed-caption float-right', 'Subtitles',
@@ -147,6 +149,12 @@ function buildHeader () {
 function listen () {
   // The pointer being on a bar keeps the bars up
   window.addEventListener('mousemove', () => act('mediaMouseMoved', true))
+
+  // ...and once it leaves, they are free to go again. Without this the bars
+  // would stay up for good, since the picture below them is mpv's own window
+  // and sends the page no events of its own
+  document.addEventListener('mouseleave', () => act('mediaMouseMoved', false))
+  window.addEventListener('blur', () => act('mediaMouseMoved', false))
   window.addEventListener('wheel', e => {
     act('changeVolume', (-e.deltaY | e.deltaX) / 500)
   })
@@ -167,8 +175,10 @@ function drawPreview () {
   const width = document.body.clientWidth || 1
   const time = scrubbing * duration
   parts.preview.style.display = ''
+  // The pill is centred on the pointer by its own margin, and kept inside the
+  // window at either end
   parts.preview.style.left =
-    Math.min(Math.max(scrubbing * width - 43, 5), width - 91) + 'px'
+    Math.min(Math.max(scrubbing * width, 35), width - 35) + 'px'
   parts.preview.textContent = formatTime(time, duration)
 }
 
@@ -202,7 +212,9 @@ function draw (data) {
   parts.time.textContent = formatTime(shown.currentTime, shown.duration) +
     ' / ' + formatTime(shown.duration, shown.duration)
 
-  parts.speed.textContent = (shown.playbackRate || 1) + 'x'
+  const rate = shown.playbackRate || 1
+  parts.speed.textContent = rate + 'x'
+  parts.speed.className = 'playback-rate float-right' + (rate !== 1 ? ' active' : '')
   parts.captions.className = 'icon closed-caption float-right' +
     (shown.subtitlesOn ? ' active' : shown.hasSubtitles ? '' : ' dim')
   parts.audio.className = 'icon audio-tracks float-right' +

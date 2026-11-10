@@ -12,7 +12,7 @@ module.exports = {
   remove
 }
 
-const { app, dialog } = require('electron')
+const { BrowserWindow, ipcMain } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const { spawn } = require('child_process')
@@ -22,8 +22,6 @@ const log = require('./log')
 
 const EXE_NAME = path.basename(process.execPath)
 const UPDATE_EXE = path.join(path.dirname(process.execPath), '..', 'Update.exe')
-
-const BOTH = 'Desktop,StartMenu'
 
 function available () {
   return process.platform === 'win32' && fs.existsSync(UPDATE_EXE)
@@ -48,43 +46,65 @@ function remove (locations) {
 }
 
 /**
- * Asked once, right after installing: which shortcuts should stay. Both are
- * there already, so anything not chosen is taken away again.
+ * Asked once, right after installing: a window of tick boxes, the way an
+ * ordinary Windows installer asks. Both shortcuts are there already, so
+ * anything left unticked is taken away again.
  */
 function askOnFirstRun (win) {
   if (!available()) return
 
-  const options = {
-    type: 'question',
-    title: config.APP_NAME,
-    message: 'Where would you like shortcuts to ' + config.APP_NAME + '?',
-    detail: 'You can change this later by making or deleting the shortcuts yourself.',
-    buttons: ['Desktop and Start menu', 'Start menu only', 'Desktop only', 'Neither'],
-    defaultId: 0,
-    cancelId: 0
-  }
+  const parent = win && !win.isDestroyed() ? win : undefined
 
-  const choose = ({ response }) => {
-    if (response === 0) return create(BOTH)
-    if (response === 1) {
-      create('StartMenu')
-      remove('Desktop')
-      return
+  const chooser = new BrowserWindow({
+    parent,
+    modal: !!parent,
+    width: 540,
+    height: 380,
+    useContentSize: true,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    show: false,
+    title: config.APP_NAME + ' Setup',
+    backgroundColor: '#1e1e1e',
+    autoHideMenuBar: true,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false
     }
-    if (response === 2) {
-      create('Desktop')
-      remove('StartMenu')
-      return
-    }
-    remove(BOTH)
+  })
+
+  chooser.setMenuBarVisibility(false)
+  chooser.loadURL('file://' + path.join(config.STATIC_PATH, 'first-run.html'))
+  chooser.once('ready-to-show', () => chooser.show())
+
+  ipcMain.once('first-run-choice', (e, choice) => {
+    apply(choice, win)
+    if (!chooser.isDestroyed()) chooser.close()
+  })
+
+  // Closing the window without answering leaves everything as the installer
+  // left it: both shortcuts, and no change to what opens torrent files
+  chooser.on('closed', () => ipcMain.removeAllListeners('first-run-choice'))
+}
+
+function apply (choice, win) {
+  const wanted = []
+  const unwanted = []
+
+  ;(choice.desktop ? wanted : unwanted).push('Desktop')
+  ;(choice.startMenu ? wanted : unwanted).push('StartMenu')
+
+  if (wanted.length) create(wanted.join(','))
+  if (unwanted.length) remove(unwanted.join(','))
+
+  log('shortcuts kept: ' + (wanted.join(',') || 'none'))
+
+  // The page owns the preferences, and setting this one from there is what
+  // registers or unregisters the handlers
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('dispatch', 'updatePreferences', 'isFileHandler',
+      !!choice.fileHandler)
   }
-
-  const show = win && !win.isDestroyed()
-    ? dialog.showMessageBox(win, options)
-    : dialog.showMessageBox(options)
-
-  show.then(choose).catch(err => log('could not ask about shortcuts', err))
-
-  // Nothing else depends on the answer, so the app carries on meanwhile
-  if (!app.isReady()) log('asked about shortcuts before the app was ready')
 }

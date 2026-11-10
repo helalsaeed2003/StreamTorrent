@@ -18,14 +18,11 @@
       background: #101010;
     }
 
-    body.part-controls {
-      /* The strip above the controls, where the time shows while scrubbing,
-         belongs to the picture rather than to the bar */
-      background: transparent;
-    }
-
+    /* The window is the bar, so the controls themselves add no shade of their
+       own: the few pixels above them are the seek bar's headroom, not a second
+       bar over the picture */
     .player .controls {
-      background: #101010;
+      background: transparent;
     }
 
     .chrome-header {
@@ -55,15 +52,22 @@
       opacity: 0.9;
     }
 
-    /* The time shown while the pointer runs along the seek bar */
+    /* The time shown while the pointer runs along the seek bar. It sits inside
+       the bar, under the pointer, so nothing has to stick out over the video */
     .player .controls .scrub-preview {
       position: absolute;
-      bottom: 46px;
-      width: 86px;
+      bottom: 7px;
+      width: 60px;
+      height: 22px;
+      line-height: 22px;
+      margin-left: -30px;
       text-align: center;
-      color: #eee;
+      color: #fff;
       font-size: 13px;
-      text-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
+      font-variant-numeric: tabular-nums;
+      background: rgba(0, 0, 0, 0.82);
+      border-radius: 3px;
+      pointer-events: none;
       font-family: Segoe UI, Helvetica Neue, sans-serif;
     }
   </style>
