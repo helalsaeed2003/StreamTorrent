@@ -192,10 +192,15 @@ function wipe (dir, { attempts = 20, delayMs = 150, log = () => {} } = {}) {
     return { deleted: false, skipped: 'not ours' }
   }
 
+  // Windows stops at 260 characters unless a path is written this way, and
+  // a torrent with deep folders in it goes well past that
+  const longPathPrefix = '\\\\?\\'
+  const reachable = process.platform === 'win32' ? longPathPrefix + target : target
+
   let lastError = null
   for (let attempt = 0; attempt < attempts; attempt++) {
     try {
-      fs.rmSync(target, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+      fs.rmSync(reachable, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
       if (!fs.existsSync(target)) {
         log('deleted ' + target)
         return { deleted: true }

@@ -67,6 +67,10 @@ if (shouldQuit) {
 }
 
 function init () {
+  // Anything left in the folder the installer owns is brought across first,
+  // before the state file is read
+  require('./migrate-data').run()
+
   app.on('second-instance', (event, commandLine, workingDirectory) => onAppOpen(commandLine))
   if (config.IS_PORTABLE) {
     const path = require('path')

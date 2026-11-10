@@ -35,6 +35,14 @@ const argv = minimist(process.argv.slice(2), {
   ]
 })
 
+// Empties a folder without removing the folder itself
+function emptyDir (dir) {
+  if (!fs.existsSync(dir)) return fs.mkdirSync(dir, { recursive: true })
+  for (const name of fs.readdirSync(dir)) {
+    rimraf.sync(path.join(dir, name))
+  }
+}
+
 function build () {
   console.log('Installing node_modules...')
   rimraf.sync(NODE_MODULES_PATH)
@@ -43,7 +51,9 @@ function build () {
   ensureElectronBinary()
 
   console.log('Nuking dist/ and build/...')
-  rimraf.sync(DIST_PATH)
+  // The folder itself is left alone: Windows refuses to remove a folder that
+  // is open in Explorer, and the build would stop there for no good reason
+  emptyDir(DIST_PATH)
   rimraf.sync(BUILD_PATH)
 
   console.log('Build: Transpiling to ES5...')

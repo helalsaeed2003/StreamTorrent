@@ -132,9 +132,21 @@ module.exports = {
 function getConfigPath () {
   if (IS_PORTABLE) {
     return PORTABLE_PATH
-  } else {
-    return path.dirname(appConfig.filePath)
   }
+
+  /**
+   * Not %LOCALAPPDATA%\StreamTorrent: that is where Squirrel installs the
+   * program, and StreamTorrentSetup.exe deletes that folder outright every
+   * time it runs. The torrent list, the thumbnails and the saved .torrent
+   * files would go with it. They live beside it instead, in a folder nothing
+   * but this app touches; src/main/migrate-data.js brings across anything
+   * left in the old place.
+   */
+  if (process.platform === 'win32' && process.env.LOCALAPPDATA) {
+    return path.join(process.env.LOCALAPPDATA, APP_NAME + 'Data')
+  }
+
+  return path.dirname(appConfig.filePath)
 }
 
 // The folder the program itself lives in. For an installed build that is the
@@ -156,12 +168,12 @@ function getTempPath () {
   // "Portable Settings" folder so it leaves nothing behind on the machine
   if (IS_PORTABLE) return path.join(PORTABLE_PATH, 'Temp')
 
-  // The installed app lives in a folder named after its version, which
-  // changes with every update, so temp files go beside it instead:
-  // LocalAppData\StreamTorrent\Temp. The same folder is then used from one
-  // version to the next.
+  // Beside the saved data, in the folder the installer never touches. The
+  // program's own folder is no good: it is named after the version, and the
+  // installer deletes the lot each time it runs - which it could not even do
+  // while a big torrent's deep folders were sitting in there.
   if (process.platform === 'win32' && process.env.LOCALAPPDATA) {
-    return path.join(process.env.LOCALAPPDATA, APP_NAME, 'Temp')
+    return path.join(getConfigPath(), 'Temp')
   }
 
   return path.join(getProgramPath(), 'Temp')
