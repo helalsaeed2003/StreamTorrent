@@ -93,6 +93,16 @@ function init () {
     // shut down before the cleanup could happen.
     streams.wipe(state.saved)
 
+    // Ask the window to write the torrent list and preferences out every
+    // minute. The window does this itself as well, but a timer in a window
+    // can be slowed right down while that window is hidden, and this one
+    // cannot.
+    setInterval(() => {
+      try {
+        windows.main.dispatch('stateSave')
+      } catch (err) {}
+    }, 60 * 1000)
+
     menu.init()
     windows.main.init(state, { hidden })
     windows.webtorrent.init()

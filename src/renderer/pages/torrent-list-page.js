@@ -338,7 +338,15 @@ module.exports = class TorrentList extends React.Component {
     const matches = query ? matchingFiles(torrentSummary, query).length : null
 
     return (
-      <div key='find' className='find-bar'>
+      // Clicks and right-clicks belong to the box, not to the torrent row
+      // it sits in, which would otherwise fold itself away under it
+      <div
+        key='find' className='find-bar'
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
+        onContextMenu={(e) => e.stopPropagation()}
+      >
         <i className='icon'>search</i>
         <input
           className='find-input'
@@ -347,6 +355,11 @@ module.exports = class TorrentList extends React.Component {
           placeholder='Search this torrent'
           value={state.find.query}
           onChange={(e) => dispatch('setFindQuery', e.target.value)}
+          onContextMenu={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            dispatch('openTextContextMenu')
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Escape') dispatch('closeFind')
             e.stopPropagation()

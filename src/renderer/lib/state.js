@@ -268,6 +268,10 @@ async function load (cb) {
     if (!Array.isArray(saved.torrents)) saved.torrents = []
     if (!Array.isArray(saved.staleTempPaths)) saved.staleTempPaths = []
 
+    // A torrent whose .torrent file is still here but which the saved list
+    // has lost - to a crash, or an update that cut the app off - is put back
+    recoverLostTorrents(saved)
+
     // Everything downloaded is deleted when the app quits, so nothing is
     // wanted from a torrent until the user plays or preloads something.
     // Without this, files chosen last time would start downloading again.
@@ -285,6 +289,72 @@ async function load (cb) {
 
     cb(null, state)
   }
+}
+
+/**
+ * Puts back any torrent whose .torrent file is still in the torrents folder
+ * but which is missing from the saved list.
+ *
+ * Every torrent added is written there, and the file is deleted when the user
+ * removes the torrent, so anything left over is a torrent that was added and
+ * never removed. Without this, a state file lost to a crash or an update takes
+ * the whole list with it even though the torrents themselves are still here.
+ */
+function recoverLostTorrents (saved) {
+  const fs = require('fs')
+  const parseTorrent = require('parse-torrent')
+
+  let names
+  try {
+    names = fs.readdirSync(config.TORRENT_PATH)
+  } catch (err) {
+    return // no folder yet: nothing was ever added
+  }
+
+  const known = new Set(saved.torrents.map(t => t.infoHash).filter(Boolean))
+
+  for (const name of names) {
+    if (!name.endsWith('.torrent')) continue
+    const infoHash = path.basename(name, '.torrent')
+    if (known.has(infoHash)) continue
+
+    let parsed
+    try {
+      parsed = parseTorrent(fs.readFileSync(path.join(config.TORRENT_PATH, name)))
+    } catch (err) {
+      console.log('could not read the torrent file %s: %o', name, err)
+      continue
+    }
+    if (!parsed || parsed.infoHash !== infoHash) continue
+
+    const poster = findPoster(infoHash)
+    saved.torrents.push({
+      status: 'paused',
+      infoHash,
+      name: parsed.name,
+      displayName: parsed.name,
+      torrentFileName: name,
+      magnetURI: parseTorrent.toMagnetURI(parsed),
+      files: parsed.files,
+      // Nothing is downloaded until the user plays or preloads something
+      selections: parsed.files.map(() => false),
+      posterFileName: poster || undefined
+    })
+    console.log('put %s back in the list from its torrent file', parsed.name)
+  }
+}
+
+// The thumbnail already taken for a torrent, if there is one
+function findPoster (infoHash) {
+  const fs = require('fs')
+  for (const extension of ['.jpg', '.png', '.gif']) {
+    try {
+      const name = infoHash + extension
+      fs.statSync(path.join(config.POSTER_PATH, name))
+      return name
+    } catch (err) {}
+  }
+  return null
 }
 
 /**

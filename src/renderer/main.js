@@ -36,6 +36,7 @@ const sound = require('./lib/sound')
 const TorrentPlayer = require('./lib/torrent-player')
 const MpvPlayer = require('./lib/mpv-player')
 const PlayerMenu = require('./lib/player-menu')
+const { showContextMenu } = require('./lib/context-menu')
 
 // Perf optimization: Needed immediately, so do not lazy load it below
 const TorrentListController = require('./controllers/torrent-list-controller')
@@ -303,6 +304,14 @@ const dispatchHandlers = {
     if (!state.find.active) state.find.query = ''
   },
   setFindQuery: (query) => { state.find.query = query },
+  openTextContextMenu: () => showContextMenu([
+    { role: 'cut' },
+    { role: 'copy' },
+    { role: 'paste' },
+    { type: 'separator' },
+    { role: 'delete' },
+    { role: 'selectAll' }
+  ]),
   closeFind: () => {
     state.find.active = false
     state.find.query = ''

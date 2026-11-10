@@ -62,6 +62,10 @@ function init () {
     const template = items.map(item => {
       if (item.type === 'separator') return { type: 'separator' }
 
+      // Cut, copy, paste and the rest are done by the system itself, in
+      // whatever text box the menu was asked for
+      if (item.role) return { role: item.role }
+
       const entry = {
         label: String(item.label),
         enabled: item.enabled !== false
