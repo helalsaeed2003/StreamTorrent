@@ -347,14 +347,14 @@ module.exports = class TorrentListController {
   }
 
   // Open or close a folder in a torrent's file tree.
-  // Which folders are open is saved, so the list looks the same next time the
-  // app runs, not just when coming back from the player.
+  // Which folders are open lasts as long as the app is running, so coming
+  // back from the player shows the list as it was left. It is not written to
+  // disk: a torrent opens with its folders closed every time the app starts.
   toggleFolder (infoHash, folderKey) {
-    const expanded = this.state.saved.folderExpanded
+    const expanded = this.state.folderExpanded
     const key = FileTree.getFolderKey(infoHash, folderKey)
     if (expanded[key]) delete expanded[key]
     else expanded[key] = true
-    dispatch('stateSave')
   }
 
   // Open or close every folder of one torrent at once
@@ -362,7 +362,7 @@ module.exports = class TorrentListController {
     const torrentSummary = TorrentSummary.getByKey(this.state, infoHash)
     if (!torrentSummary) return
 
-    const open = this.state.saved.folderExpanded
+    const open = this.state.folderExpanded
     const sortByName = this.state.saved.prefs.sortByName
     const walk = (node) => {
       node.folders.forEach((folder) => {
@@ -373,7 +373,6 @@ module.exports = class TorrentListController {
       })
     }
     walk(FileTree.getTree(torrentSummary, sortByName))
-    dispatch('stateSave')
   }
 
   confirmDeleteTorrent (infoHash, deleteData) {
@@ -489,7 +488,7 @@ module.exports = class TorrentListController {
 
     showContextMenu([
       {
-        label: 'Find in This Torrent',
+        label: 'Search',
         action: 'findInTorrent',
         args: [torrentSummary.infoHash]
       },

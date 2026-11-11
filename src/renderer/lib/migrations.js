@@ -248,4 +248,7 @@ function fillInNewSettings (saved) {
   if (!Array.isArray(saved.searchHistory)) {
     saved.searchHistory = []
   }
+  if (saved.prefs.searchHistory == null) {
+    saved.prefs.searchHistory = true
+  }
 }

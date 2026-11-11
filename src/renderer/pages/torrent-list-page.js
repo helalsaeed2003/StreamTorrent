@@ -97,9 +97,28 @@ module.exports = class TorrentList extends React.Component {
         style={style}
         className={classes.join(' ')}
         draggable={!!infoHash}
+        // Only the title line starts a drag. An open torrent can be thousands
+        // of rows tall, and holding the mouse down on one of them used to pick
+        // the whole torrent up by mistake.
+        onMouseDown={(e) => {
+          this.dragFromTitle = !!(e.target.closest &&
+            e.target.closest('.drag-handle'))
+        }}
         onDragStart={(e) => {
+          if (!this.dragFromTitle) {
+            e.preventDefault()
+            return
+          }
           e.dataTransfer.effectAllowed = 'move'
           e.dataTransfer.setData('text/plain', '')
+
+          // Drag the title, not the whole open torrent: the picture that
+          // follows the pointer is otherwise as tall as the file list
+          const handle = e.target.closest('.drag-handle')
+          if (handle && e.dataTransfer.setDragImage) {
+            e.dataTransfer.setDragImage(handle, 20, 10)
+          }
+
           dispatch('startDraggingTorrent', infoHash)
         }}
         onDragOver={(e) => {
@@ -130,7 +149,7 @@ module.exports = class TorrentList extends React.Component {
   renderTorrentMetadata (torrentSummary) {
     const name = torrentSummary.name || 'Loading torrent...'
     const elements = [(
-      <div key='name' className='name ellipsis'>{name}</div>
+      <div key='name' className='name ellipsis drag-handle'>{name}</div>
     )]
 
     // If it's downloading/seeding then show progress info
@@ -291,36 +310,62 @@ module.exports = class TorrentList extends React.Component {
         >
           close
         </i>
-        {this.renderSearchHistory()}
       </div>
     )
   }
 
-  // The list of earlier searches, under the box
-  renderSearchHistory () {
+  /**
+   * What was searched for before, kept newest first. Nothing is offered when
+   * the setting is off.
+   */
+  searchHistory () {
+    const state = this.props.state
+    if (state.saved.prefs.searchHistory === false) return []
+    return state.saved.searchHistory || []
+  }
+
+  /**
+   * The whole of an earlier search that starts with what has been typed so
+   * far, so the rest of it can be filled in. Nothing while the user is
+   * rubbing characters out, which would fight with the backspace key.
+   */
+  completionFor (typed) {
+    if (!typed || this.deletingText) return null
+
+    const lower = typed.toLowerCase()
+    const match = this.searchHistory().find((entry) =>
+      entry.length > typed.length && entry.toLowerCase().startsWith(lower))
+
+    // Keep what the user actually typed, and add the rest of the old search
+    return match ? typed + match.slice(typed.length) : null
+  }
+
+  // The list of earlier searches, shown under the box
+  renderSearchHistory (query) {
     const state = this.props.state
     if (!state.find.historyOpen) return null
 
-    const history = state.saved.searchHistory || []
+    const lower = query.toLowerCase()
+    const history = this.searchHistory()
+      .filter((entry) => !lower || entry.toLowerCase().includes(lower))
 
-    if (history.length === 0) {
-      return (
-        <div key='history' className='find-history'>
-          <div className='find-history-empty'>Nothing searched for yet</div>
-        </div>
-      )
-    }
+    if (history.length === 0) return null
 
     return (
-      <div key='history' className='find-history'>
-        {history.map((query, i) => (
+      <div
+        key='history' className='find-history'
+        // Taking the focus off the box would close this list before the click
+        // on it was delivered
+        onMouseDown={(e) => e.preventDefault()}
+      >
+        {history.map((entry, i) => (
           <div
             key={'h' + i}
             className='find-history-item'
             role='button'
-            onClick={() => dispatch('useSearchHistory', query)}
+            onClick={() => dispatch('useSearchHistory', entry)}
           >
-            {query}
+            {entry}
           </div>
         ))}
         <div
@@ -416,15 +461,43 @@ module.exports = class TorrentList extends React.Component {
           autoFocus
           placeholder='Search this torrent'
           value={state.find.query}
-          onChange={(e) => dispatch('setFindQuery', e.target.value)}
+          onFocus={dispatcher('openSearchHistory')}
+          onBlur={dispatcher('closeSearchHistory')}
+          onChange={(e) => {
+            const input = e.target
+            const typed = input.value
+
+            // Fill in the rest of an earlier search, with the added part
+            // selected so that typing on simply replaces it
+            const filled = this.completionFor(typed)
+            dispatch('setFindQuery', filled || typed)
+
+            if (filled) {
+              window.requestAnimationFrame(() => {
+                try {
+                  input.setSelectionRange(typed.length, filled.length)
+                } catch (err) {}
+              })
+            }
+          }}
           onContextMenu={(e) => {
             e.preventDefault()
             e.stopPropagation()
             dispatch('openTextContextMenu')
           }}
           onKeyDown={(e) => {
-            if (e.key === 'Escape') dispatch('closeFind')
-            if (e.key === 'Enter') dispatch('rememberSearch')
+            // Rubbing characters out must not be undone by filling them
+            // straight back in
+            this.deletingText = e.key === 'Backspace' || e.key === 'Delete'
+
+            if (e.key === 'Escape') {
+              if (state.find.historyOpen) dispatch('closeSearchHistory')
+              else dispatch('closeFind')
+            }
+            if (e.key === 'Enter') {
+              dispatch('rememberSearch')
+              dispatch('closeSearchHistory')
+            }
             if (e.key === 'ArrowDown') dispatch('toggleSearchHistory')
             e.stopPropagation()
           }}
@@ -434,15 +507,20 @@ module.exports = class TorrentList extends React.Component {
             ? ''
             : matches === 1 ? '1 file' : matches + ' files'}
         </span>
-        <i
-          className={'icon find-history-toggle' +
-            (state.find.historyOpen ? ' active' : '')}
-          title='Searches you have made before'
-          role='button'
-          onClick={dispatcher('toggleSearchHistory')}
-        >
-          history
-        </i>
+        {state.saved.prefs.searchHistory === false
+          ? null
+          : (
+            <i
+              className={'icon find-history-toggle' +
+                (state.find.historyOpen ? ' active' : '')}
+              title='Searches you have made before'
+              role='button'
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={dispatcher('toggleSearchHistory')}
+            >
+              history
+            </i>
+            )}
         <i
           className='icon find-close'
           title='Close the search'
@@ -451,6 +529,7 @@ module.exports = class TorrentList extends React.Component {
         >
           close
         </i>
+        {this.renderSearchHistory(query)}
       </div>
     )
   }
@@ -482,7 +561,7 @@ module.exports = class TorrentList extends React.Component {
     const state = this.props.state
     const infoHash = torrentSummary.infoHash
 
-    const expanded = state.saved.folderExpanded || {}
+    const expanded = state.folderExpanded || {}
     node.folders.forEach((folder) => {
       const isExpanded = !!expanded[FileTree.getFolderKey(infoHash, folder.key)]
       rows.push(this.renderFolderRow(torrentSummary, folder, depth, isExpanded))

@@ -326,6 +326,9 @@ const dispatchHandlers = {
   },
   startDraggingTorrent: (infoHash) => {
     state.draggingTorrent = infoHash
+    // An open torrent is as tall as its file list, which the drag image then
+    // has to carry. Close it while the torrent is being moved.
+    state.selectedInfoHash = null
   },
   dragTorrentOver: (infoHash, below) => {
     state.dropBefore = below ? null : infoHash
@@ -342,11 +345,20 @@ const dispatchHandlers = {
   },
   setFindQuery: (query) => {
     state.find.query = query
-    state.find.historyOpen = false
+    // The list stays up while typing, narrowing down to what still matches
+    if (!rememberingSearches()) state.find.historyOpen = false
   },
   // The list of what was searched for before, under the search box
   toggleSearchHistory: () => {
+    if (!rememberingSearches()) return
     state.find.historyOpen = !state.find.historyOpen
+  },
+  openSearchHistory: () => {
+    if (!rememberingSearches()) return
+    state.find.historyOpen = true
+  },
+  closeSearchHistory: () => {
+    state.find.historyOpen = false
   },
   useSearchHistory: (query) => {
     state.find.query = query
@@ -623,8 +635,13 @@ function resumeTorrents () {
     })
 }
 
-// How many past searches the box remembers
-const SEARCH_HISTORY_LENGTH = 12
+// How many past searches the box remembers and offers
+const SEARCH_HISTORY_LENGTH = 5
+
+// Whether the box is keeping them at all
+function rememberingSearches () {
+  return state.saved.prefs.searchHistory !== false
+}
 
 /**
  * Keeps what was searched for, so the box can offer it again. The newest is
@@ -632,6 +649,8 @@ const SEARCH_HISTORY_LENGTH = 12
  * listing it twice.
  */
 function rememberSearch () {
+  if (!rememberingSearches()) return
+
   const query = String(state.find.query || '').trim()
   if (!query) return
 

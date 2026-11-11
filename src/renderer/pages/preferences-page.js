@@ -296,6 +296,26 @@ class PreferencesPage extends React.Component {
     )
   }
 
+  // Whether the search box remembers what was typed into it
+  searchHistoryCheckbox () {
+    return (
+      <Preference>
+        <Checkbox
+          className='control'
+          checked={this.props.state.saved.prefs.searchHistory !== false}
+          label='Remember what you search for'
+          onCheck={(e, value) =>
+            dispatch('updatePreferences', 'searchHistory', value)}
+        />
+        <p>
+          The search box lists the last five things you looked for, and fills
+          in the rest of one as you start typing it again. With this off it
+          keeps nothing.
+        </p>
+      </Preference>
+    )
+  }
+
   // Where new builds are kept: the folder holding RELEASES and the .nupkg
   // files that bin/package.js writes
   updateFolderSelector () {
@@ -332,6 +352,7 @@ class PreferencesPage extends React.Component {
         <PreferencesSection title='Playback'>
           {this.highestPlaybackPriorityCheckbox()}
           {this.playlistFollowsSearchCheckbox()}
+          {this.searchHistoryCheckbox()}
           {this.castingCheckbox()}
         </PreferencesSection>
         <PreferencesSection title='Default torrent app'>

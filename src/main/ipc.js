@@ -269,6 +269,13 @@ function init () {
 
     if (flag) handlers.install()
     else handlers.uninstall()
+
+    // Registering is not enough on Windows once another program has been
+    // chosen for .torrent files: that choice is the user's to change, in
+    // Settings. Open the screen where they can, rather than doing nothing.
+    if (flag && handlers.isOverriddenWin32('.torrent')) {
+      setTimeout(() => handlers.openDefaultAppsSettings(), 400)
+    }
   })
 
   /**

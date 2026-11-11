@@ -110,11 +110,17 @@ function init () {
       } catch (err) {}
     }, 60 * 1000)
 
-    // Straight after installing, ask which shortcuts to keep. Squirrel has
-    // made both by then, and anything not wanted is taken away again.
+    // Straight after installing, ask which shortcuts to make. Every other
+    // start, put back whatever was asked for before: Squirrel writes its own
+    // pair again after each update, and they are named differently.
     if (justInstalled) {
       setTimeout(() => {
         require('./install-shortcuts').askOnFirstRun(windows.main.win)
+      }, 2500)
+    } else if (process.platform === 'win32' && config.IS_PRODUCTION &&
+      !config.IS_PORTABLE) {
+      setTimeout(() => {
+        require('./install-shortcuts').reconcile(state.saved.prefs, windows.main.win)
       }, 2500)
     }
 

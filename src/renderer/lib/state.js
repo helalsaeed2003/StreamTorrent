@@ -63,6 +63,9 @@ function getDefaultState () {
      * back exactly as the user left it: same scroll position, same open folders.
      */
     listScrollTop: 0, /* scroll position of the torrent list */
+    /* which folders of which torrents are open. Not saved: a torrent opens
+       with its folders closed every time the app starts */
+    folderExpanded: {},
     /* while a torrent is being dragged into a new place in the list */
     draggingTorrent: null, /* infoHash of the torrent being dragged */
     dropBefore: null, /* it would land above this one */
@@ -162,10 +165,10 @@ function setupStateSaved () {
       highestPlaybackPriority: true,
       globalTrackers: defaultAnnounceList,
       tempPath: '', /* '' means the default folder, inside the program folder */
-      playlistFollowsSearch: true /* Next and Previous follow an open search */
+      playlistFollowsSearch: true, /* Next and Previous follow an open search */
+      searchHistory: true /* the search box remembers and offers what was typed */
     },
     torrents: config.DEFAULT_TORRENTS.map(createTorrentObject),
-    folderExpanded: {}, /* which folders of which torrents are open */
     searchHistory: [], /* what was last searched for, newest first */
     staleTempPaths: [], /* temp folders we used before the setting was changed */
     torrentsToResume: [],
@@ -270,7 +273,9 @@ async function load (cb) {
 
     // Fill in anything a config written by an older build is missing, so that
     // saved torrents, open folders and the chosen speed all survive an upgrade
-    if (!saved.folderExpanded) saved.folderExpanded = {}
+    // Open folders used to be saved. They are not any more, so a torrent
+    // opens closed up however it was left, and the old entries are dropped
+    delete saved.folderExpanded
     if (!saved.prefs) saved.prefs = {}
     if (typeof saved.prefs.tempPath !== 'string') saved.prefs.tempPath = ''
     if (typeof saved.prefs.updateFolder !== 'string') {
