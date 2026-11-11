@@ -105,8 +105,56 @@
       font-size: 13px;
       font-variant-numeric: tabular-nums;
       font-family: Segoe UI, Helvetica Neue, sans-serif;
-      background: rgba(0, 0, 0, 0.85);
+      background: rgba(24, 24, 24, 0.62);
       border-radius: 4px;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+    }
+
+    /* The offer to jump to where the video was left off */
+    body.part-resume {
+      background: transparent;
+    }
+
+    .resume-offer {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      height: 36px;
+      padding: 0 8px 0 14px;
+      box-sizing: border-box;
+      color: #eee;
+      font-family: Segoe UI, Helvetica Neue, sans-serif;
+      font-size: 13px;
+      background: rgba(24, 24, 24, 0.86);
+      border-radius: 4px;
+    }
+
+    .resume-offer-text {
+      white-space: nowrap;
+    }
+
+    .resume-offer-action {
+      cursor: pointer;
+      white-space: nowrap;
+      color: #4a90d9;
+      font-weight: 600;
+    }
+
+    .resume-offer-action:hover {
+      color: #6aa8e6;
+    }
+
+    .resume-offer-close {
+      cursor: pointer;
+      font-size: 18px;
+      opacity: 0.6;
+      margin-left: auto;
+      position: static;
+      top: auto;
+    }
+
+    .resume-offer-close:hover {
+      opacity: 1;
     }
 
     /* The point at the bottom, resting on the seek bar */
@@ -120,7 +168,7 @@
       height: 0;
       border-left: 6px solid transparent;
       border-right: 6px solid transparent;
-      border-top: 7px solid rgba(0, 0, 0, 0.85);
+      border-top: 7px solid rgba(24, 24, 24, 0.62);
     }
   </style>
 </head>
@@ -135,6 +183,11 @@
     </div>
   </div>
   <div class="scrub-tip" id="tip"></div>
+  <div class="resume-offer" id="resume">
+    <span class="resume-offer-text" id="resume-text"></span>
+    <span class="resume-offer-action" id="resume-go">Continue from there</span>
+    <i class="icon resume-offer-close" id="resume-close">close</i>
+  </div>
   <script>require('./player-chrome.js')</script>
 </body>
 </html>

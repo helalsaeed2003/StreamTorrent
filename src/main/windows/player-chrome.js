@@ -39,8 +39,13 @@ const BOTTOM_HEIGHT = config.UI_PLAYER_CONTROLS_HEIGHT
 
 // The time under the pointer floats in a small window of its own, which is
 // see-through everywhere except the label itself
-const PREVIEW_WIDTH = 96
+const PREVIEW_WIDTH = 70
 const PREVIEW_HEIGHT = config.UI_PLAYER_PREVIEW_HEIGHT
+
+// The offer to jump to where a video was left off, which sits in the corner
+// above the controls until it is taken up, dismissed or times out
+const RESUME_WIDTH = 320
+const RESUME_HEIGHT = 44
 
 let open = false
 
@@ -67,8 +72,8 @@ function setHovering (data) {
 
   win.setBounds({
     x: Math.max(area.x + 4, Math.min(wanted, limit)),
-    // Sitting on the bar, so its point touches the seek bar
-    y: area.y + area.height - BOTTOM_HEIGHT - PREVIEW_HEIGHT + 2,
+    // Just clear of the seek bar, so its point stops short of the line
+    y: area.y + area.height - BOTTOM_HEIGHT - PREVIEW_HEIGHT - 3,
     width: PREVIEW_WIDTH,
     height: PREVIEW_HEIGHT
   })
@@ -86,6 +91,39 @@ function previewWindow () {
   return win && !win.isDestroyed() ? win : null
 }
 
+/**
+ * The offer to jump to where this video was left off. It sits in the bottom
+ * left corner, above the controls, and goes away when it is taken up,
+ * dismissed or times out.
+ */
+function setResumeOffer (text) {
+  const win = create('resume')
+  if (!win || win.isDestroyed()) return
+
+  if (!open || !text) {
+    if (win.isVisible()) win.hide()
+    return
+  }
+
+  const main = require('./main').win
+  if (!main || main.isDestroyed()) return
+
+  const area = main.getContentBounds()
+  win.setBounds({
+    x: area.x + 16,
+    y: area.y + area.height - BOTTOM_HEIGHT - RESUME_HEIGHT - 12,
+    width: RESUME_WIDTH,
+    height: RESUME_HEIGHT
+  })
+
+  const send = () => win.webContents.send('player-chrome-resume', text)
+  if (win.webContents.isLoading()) win.webContents.once('did-finish-load', send)
+  else send()
+
+  if (!win.isVisible()) win.showInactive()
+  win.moveTop()
+}
+
 function isOpen () {
   return open
 }
@@ -97,9 +135,12 @@ function create (part) {
   const main = require('./main').win
   if (!main || main.isDestroyed()) return null
 
-  // The time under the pointer is a label with a point at the bottom, so its
-  // window has to be see-through around it rather than a dark rectangle
-  const floating = part === 'preview'
+  // The time under the pointer and the offer to jump back are labels with
+  // rounded corners, so their windows have to be see-through around them
+  // rather than dark rectangles. Only the time ignores the mouse; the offer
+  // is there to be pressed.
+  const floating = part === 'preview' || part === 'resume'
+  const passThrough = part === 'preview'
 
   const win = new BrowserWindow({
     parent: main,
@@ -112,9 +153,13 @@ function create (part) {
     fullscreenable: false,
     skipTaskbar: true,
     hasShadow: false,
-    // Never take focus: the keyboard stays with the main window, so the app's
-    // hotkeys keep working while a video plays
-    focusable: false,
+    // The bars can be given focus, so that pressing one while the app is in
+    // the background does what it would in any other window: brings the app
+    // forward and presses the button. A window that cannot be given focus is
+    // never activated by a click, and on Windows the press is swallowed. The
+    // focus is handed straight back to the main window below, so the keyboard
+    // still reaches the player.
+    focusable: !passThrough,
     transparent: floating,
     backgroundColor: floating ? '#00000000' : '#101010',
     webPreferences: {
@@ -126,8 +171,20 @@ function create (part) {
 
   playerChrome.windows[part] = win
   win.setMenuBarVisibility(false)
-  if (floating) win.setIgnoreMouseEvents(true)
-  else win.setOpacity(OPACITY)
+  if (passThrough) win.setIgnoreMouseEvents(true)
+  if (!floating) win.setOpacity(OPACITY)
+
+  // Whatever was pressed has been dealt with by then, and the keyboard goes
+  // back to the player, where the space bar and the arrow keys belong
+  if (!passThrough) {
+    win.on('focus', () => {
+      setTimeout(() => {
+        const owner = require('./main').win
+        if (owner && !owner.isDestroyed() && !owner.isFocused()) owner.focus()
+        raise()
+      }, 150)
+    })
+  }
   win.loadURL('file://' + path.join(config.STATIC_PATH, 'player-chrome.html') +
     '?part=' + part)
 
@@ -145,8 +202,8 @@ function watch (main) {
   ]
   for (const event of events) main.on(event, sync)
 
-  main.on('minimize', hideWindows)
-  main.on('hide', hideWindows)
+  main.on('minimize', hideEverything)
+  main.on('hide', hideEverything)
   main.on('restore', () => { if (open) showWindows() })
 }
 
@@ -163,6 +220,9 @@ function show (payload) {
     else send()
   }
 
+  // The offer to jump back is shown whether or not the bars are
+  setResumeOffer(payload && payload.resumeOffer != null ? payload.resumeText : '')
+
   // The bars come and go with the pointer: when they are not wanted, the
   // windows are taken away altogether, so nothing covers the picture
   sync()
@@ -172,7 +232,7 @@ function show (payload) {
 
 function hide () {
   open = false
-  hideWindows()
+  hideEverything()
 }
 
 // The two bars. The time under the pointer comes and goes on its own.
@@ -189,7 +249,18 @@ function showWindows () {
   }
 }
 
+// The bars and the time under the pointer, which come and go together. The
+// offer to jump back stays where it is: it is not tied to the pointer.
 function hideWindows () {
+  for (const part of ['header', 'controls', 'preview']) {
+    const win = playerChrome.windows[part]
+    if (!win || win.isDestroyed()) continue
+    if (win.isVisible()) win.hide()
+  }
+}
+
+// Everything, for when the player itself is being left
+function hideEverything () {
   for (const win of Object.values(playerChrome.windows)) {
     if (!win || win.isDestroyed()) continue
     if (win.isVisible()) win.hide()

@@ -463,19 +463,19 @@ function renderImageControls (state) {
   )
 }
 
-// "Resumed from 12:34 · Start over", shown briefly after picking up a video
-// partway through
+// "You stopped at 12:34 · Continue", offered briefly when a video is opened
+// that was watched partway through. Playback itself starts at the beginning.
 function renderResumeNote (state) {
-  const resumedFrom = state.playing.resumedFrom
-  if (resumedFrom == null) return
+  const offer = state.playing.resumeOffer
+  if (offer == null) return
 
   return (
     <div key='resume-note' className='resume-note'>
       <span className='resume-text'>
-        Resumed from {formatPosition(resumedFrom)}
+        You stopped at {formatPosition(offer)}
       </span>
-      <span className='resume-action' onClick={dispatcher('startOver')} role='button'>
-        Start over
+      <span className='resume-action' onClick={dispatcher('resumeFromOffer')} role='button'>
+        Continue from there
       </span>
       <i className='icon resume-dismiss' onClick={dispatcher('dismissResumeNote')} role='button'>
         close

@@ -276,6 +276,26 @@ class PreferencesPage extends React.Component {
     )
   }
 
+  // What Next and Previous do while a search is open
+  playlistFollowsSearchCheckbox () {
+    return (
+      <Preference>
+        <Checkbox
+          className='control'
+          checked={this.props.state.saved.prefs.playlistFollowsSearch !== false}
+          label='Next and Previous follow the search'
+          onCheck={(e, value) =>
+            dispatch('updatePreferences', 'playlistFollowsSearch', value)}
+        />
+        <p>
+          While a search is open in a torrent, Next and Previous step through
+          what the search found. With this off they always step through the
+          torrent in the order its files are in.
+        </p>
+      </Preference>
+    )
+  }
+
   // Where new builds are kept: the folder holding RELEASES and the .nupkg
   // files that bin/package.js writes
   updateFolderSelector () {
@@ -311,6 +331,7 @@ class PreferencesPage extends React.Component {
         </PreferencesSection>
         <PreferencesSection title='Playback'>
           {this.highestPlaybackPriorityCheckbox()}
+          {this.playlistFollowsSearchCheckbox()}
           {this.castingCheckbox()}
         </PreferencesSection>
         <PreferencesSection title='Default torrent app'>

@@ -13,8 +13,22 @@ const Playlist = require('./playlist')
 
 module.exports = { sync }
 
+// How long the offer to jump back stays up
+const RESUME_OFFER_MS = 15 * 1000
+
 // What was last sent, so the bars are only redrawn when something changes
 let last = null
+
+// "12:34" or "1:02:03"
+function formatPosition (seconds) {
+  const whole = Math.max(0, Math.floor(seconds || 0))
+  const hours = Math.floor(whole / 3600)
+  const minutes = Math.floor((whole % 3600) / 60)
+  const secs = whole % 60
+  const pad = n => (n < 10 ? '0' + n : String(n))
+  if (hours > 0) return hours + ':' + pad(minutes) + ':' + pad(secs)
+  return minutes + ':' + pad(secs)
+}
 
 function sync (state) {
   const payload = payloadFor(state)
@@ -44,8 +58,16 @@ function payloadFor (state) {
     ? fileProgress.numPiecesPresent / fileProgress.numPieces
     : 0
 
+  // The offer to jump to where this video was left off, which times out
+  const offer = playing.resumeOffer != null &&
+    Date.now() - (playing.resumeOfferedAt || 0) < RESUME_OFFER_MS
+    ? playing.resumeOffer
+    : null
+
   return {
     visible: !state.shouldHidePlayerControls(),
+    resumeOffer: offer,
+    resumeText: offer == null ? '' : formatPosition(offer),
     title: (fileSummary && fileSummary.name) || playing.fileName || '',
     isPaused: playing.isPaused,
     currentTime: playing.currentTime || 0,

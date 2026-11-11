@@ -68,7 +68,7 @@ function getDefaultState () {
     dropBefore: null, /* it would land above this one */
     dropAfter: null, /* ...or below this one */
     /* the search box over the open torrent's files, opened with Ctrl+F */
-    find: { active: false, query: '' },
+    find: { active: false, query: '', historyOpen: false },
     lastPlayed: null, /* {infoHash, fileIndex} of the file played most recently */
     streaming: null, /* {infoHash, fileIndex} of the file being downloaded now */
     tempPath: null, /* the temp folder actually in use, once checked */
@@ -122,6 +122,8 @@ function getDefaultPlayState () {
     isReady: false,
     imageLoaded: false, /* image viewer: has the picture itself arrived yet */
     resumedFrom: null, /* seconds we resumed from, for the "Resumed from" note */
+    resumeOffer: null, /* seconds we could jump to, offered when a video opens */
+    resumeOfferedAt: 0, /* when that offer was made, so it can time out */
     subtitleDelay: 0, /* subtitle timing offset, in seconds */
     isPaused: true,
     isStalled: false,
@@ -159,10 +161,12 @@ function setupStateSaved () {
       torrentsFolderPath: '',
       highestPlaybackPriority: true,
       globalTrackers: defaultAnnounceList,
-      tempPath: '' /* '' means the default folder, inside the program folder */
+      tempPath: '', /* '' means the default folder, inside the program folder */
+      playlistFollowsSearch: true /* Next and Previous follow an open search */
     },
     torrents: config.DEFAULT_TORRENTS.map(createTorrentObject),
     folderExpanded: {}, /* which folders of which torrents are open */
+    searchHistory: [], /* what was last searched for, newest first */
     staleTempPaths: [], /* temp folders we used before the setting was changed */
     torrentsToResume: [],
     version: config.APP_VERSION /* make sure we can upgrade gracefully later */

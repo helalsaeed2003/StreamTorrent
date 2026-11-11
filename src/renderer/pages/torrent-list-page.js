@@ -6,6 +6,7 @@ const LinearProgress = require('material-ui/LinearProgress').default
 const TorrentSummary = require('../lib/torrent-summary')
 const TorrentPlayer = require('../lib/torrent-player')
 const FileTree = require('../lib/file-tree')
+const FileSearch = require('../lib/file-search')
 const PlaybackPosition = require('../lib/playback-position')
 const { dispatch, dispatcher } = require('../lib/dispatcher')
 const { calculateEta, formatPosition } = require('../lib/time')
@@ -290,6 +291,45 @@ module.exports = class TorrentList extends React.Component {
         >
           close
         </i>
+        {this.renderSearchHistory()}
+      </div>
+    )
+  }
+
+  // The list of earlier searches, under the box
+  renderSearchHistory () {
+    const state = this.props.state
+    if (!state.find.historyOpen) return null
+
+    const history = state.saved.searchHistory || []
+
+    if (history.length === 0) {
+      return (
+        <div key='history' className='find-history'>
+          <div className='find-history-empty'>Nothing searched for yet</div>
+        </div>
+      )
+    }
+
+    return (
+      <div key='history' className='find-history'>
+        {history.map((query, i) => (
+          <div
+            key={'h' + i}
+            className='find-history-item'
+            role='button'
+            onClick={() => dispatch('useSearchHistory', query)}
+          >
+            {query}
+          </div>
+        ))}
+        <div
+          className='find-history-clear'
+          role='button'
+          onClick={dispatcher('forgetSearchHistory')}
+        >
+          Clear
+        </div>
       </div>
     )
   }
@@ -384,6 +424,8 @@ module.exports = class TorrentList extends React.Component {
           }}
           onKeyDown={(e) => {
             if (e.key === 'Escape') dispatch('closeFind')
+            if (e.key === 'Enter') dispatch('rememberSearch')
+            if (e.key === 'ArrowDown') dispatch('toggleSearchHistory')
             e.stopPropagation()
           }}
         />
@@ -392,6 +434,15 @@ module.exports = class TorrentList extends React.Component {
             ? ''
             : matches === 1 ? '1 file' : matches + ' files'}
         </span>
+        <i
+          className={'icon find-history-toggle' +
+            (state.find.historyOpen ? ' active' : '')}
+          title='Searches you have made before'
+          role='button'
+          onClick={dispatcher('toggleSearchHistory')}
+        >
+          history
+        </i>
         <i
           className='icon find-close'
           title='Close the search'
@@ -754,17 +805,7 @@ function getErrorMessage (torrentSummary) {
  * "Aardstyle/In Our Heads PMV.mp4" however the words are ordered.
  */
 function matchingFiles (torrentSummary, query) {
-  const words = query.toLowerCase().split(/\s+/).filter(Boolean)
-  if (words.length === 0) return []
-
-  const matches = []
-  ;(torrentSummary.files || []).forEach((file, index) => {
-    if (FileTree.isPaddingFile(file)) return
-    const haystack = (file.path || file.name || '').toLowerCase()
-    if (words.every(word => haystack.includes(word))) matches.push({ file, index })
-  })
-
-  return matches
+  return FileSearch.matchingFiles(torrentSummary, query)
 }
 
 // Every video or image inside a folder, however deeply nested

@@ -31,6 +31,9 @@ function run (state) {
   if (semver.lt(version, '0.21.0')) migrate_0_21_0(saved)
   if (semver.lt(version, '0.22.0')) migrate_0_22_0(saved)
 
+  // Settings added after the fork, which no old config has
+  fillInNewSettings(saved)
+
   if (semver.lt(version, config.APP_VERSION)) {
     installHandlers(state.saved)
   }
@@ -230,5 +233,19 @@ function migrate_0_21_0 (saved) {
 function migrate_0_22_0 (saved) {
   if (saved.prefs.externalPlayerPath == null) {
     saved.prefs.externalPlayerPath = ''
+  }
+}
+
+/**
+ * Settings this fork added. They are filled in on every start rather than at
+ * one version, so that a config written by an older build never comes back
+ * missing one of them.
+ */
+function fillInNewSettings (saved) {
+  if (saved.prefs.playlistFollowsSearch == null) {
+    saved.prefs.playlistFollowsSearch = true
+  }
+  if (!Array.isArray(saved.searchHistory)) {
+    saved.searchHistory = []
   }
 }

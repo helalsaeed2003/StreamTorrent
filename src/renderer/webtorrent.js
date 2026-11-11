@@ -3,7 +3,6 @@
 console.time('init')
 
 const crypto = require('crypto')
-const util = require('util')
 const { ipcRenderer } = require('electron')
 const fs = require('fs')
 const mm = require('music-metadata')
@@ -49,11 +48,35 @@ const PEER_ID = Buffer.from(VERSION_PREFIX + crypto.randomBytes(9).toString('bas
 // client, as explained here: https://webtorrent.io/faq
 let client = window.client = new WebTorrent({ peerId: PEER_ID })
 
+/**
+ * A short record of what the torrent process has been asked to do, kept in
+ * memory so that a stream that never starts can be looked into afterwards.
+ */
+window.__trace = []
+function trace (...args) {
+  const line = new Date().toISOString().slice(11, 23) + ' ' + args.join(' ')
+  window.__trace.push(line)
+  if (window.__trace.length > 400) window.__trace.shift()
+  console.log(line)
+}
+
 // WebTorrent-to-HTTP streaming sever
 let server = null
+let serverTorrentHash = null
+let serverInfo = null
 
 // Used for diffing, so we only send progress updates when necessary
-let prevProgress = null
+let prevSignature = null
+
+// The torrent whose file list the user is looking at. Its per-file progress is
+// worked out in full; for every other torrent only the files actually asked
+// for are reported, because a torrent can hold tens of thousands of files and
+// working out all of them, every second, leaves no time for anything else.
+let focusedInfoHash = null
+
+// Per-file progress, kept between updates so that a torrent nothing is being
+// downloaded for is not worked out again and again
+const fileProgressCache = new Map()
 
 // Which files the user has actually asked for, per torrent (infoHash -> Set of
 // file indexes). Nothing is downloaded unless it is in here, so an empty set
@@ -101,6 +124,8 @@ function init () {
     stopDownloading(infoHash))
   ipcRenderer.on('wt-prioritize-position', (e, infoHash, index, seconds, duration) =>
     prioritizePosition(infoHash, index, seconds, duration))
+  ipcRenderer.on('wt-focus-torrent', (e, infoHash) =>
+    setFocusedTorrent(infoHash))
   ipcRenderer.on('wt-fetch-file', (e, infoHash, index) =>
     fetchFile(infoHash, index))
   ipcRenderer.on('wt-delete-torrent-data', (e, infoHash) =>
@@ -143,6 +168,7 @@ function startTorrenting (torrentKey, torrentID, path, infoHash, selections) {
   // it at the file we want now. This is what makes replaying a file we already
   // downloaded instant.
   const running = infoHash && client.get(infoHash)
+  trace('startTorrenting', infoHash, 'alreadyRunning', !!running)
   if (running) {
     console.log('torrent %s is already running, reusing it', infoHash)
     running.key = torrentKey
@@ -152,7 +178,15 @@ function startTorrenting (torrentKey, torrentID, path, infoHash, selections) {
       ipcRenderer.send('wt-ready', torrentKey, info)
       ipcRenderer.send('wt-ready-' + running.infoHash, torrentKey, info)
     } else {
-      running.once('ready', () => selectFiles(running, selections))
+      running.once('ready', () => {
+        selectFiles(running, selections)
+        // The player waits to be told the torrent is ready before asking for
+        // the stream. Without this, nothing ever starts playing from a torrent
+        // that was already running but had not read its metadata yet.
+        const info = getTorrentInfo(running)
+        ipcRenderer.send('wt-ready', torrentKey, info)
+        ipcRenderer.send('wt-ready-' + running.infoHash, torrentKey, info)
+      })
     }
     return
   }
@@ -314,13 +348,35 @@ function generateTorrentPoster (torrentKey) {
 }
 
 function updateTorrentProgress () {
-  const progress = getTorrentProgress()
-  // TODO: diff torrent-by-torrent, not once for the whole update
-  if (prevProgress && util.isDeepStrictEqual(progress, prevProgress)) {
-    return /* don't send heavy object if it hasn't changed */
-  }
-  ipcRenderer.send('wt-progress', progress)
-  prevProgress = progress
+  const started = Date.now()
+  updateTorrentProgressInner()
+  const took = Date.now() - started
+  if (took > 200) trace('progressUpdate', took + 'ms')
+}
+
+function updateTorrentProgressInner () {
+  // Comparing a short line of numbers, rather than walking the whole report:
+  // with a torrent of tens of thousands of files the comparison alone used to
+  // cost more than the second it was given
+  const signature = progressSignature()
+  if (signature === prevSignature) return
+
+  prevSignature = signature
+  ipcRenderer.send('wt-progress', getTorrentProgress())
+}
+
+// Everything that would make the report different, as one short string
+function progressSignature () {
+  return client.torrents.map(torrent => [
+    torrent.key,
+    torrent.ready ? 1 : 0,
+    torrent.downloaded,
+    torrent.downloadSpeed,
+    torrent.uploadSpeed,
+    torrent.numPeers,
+    torrent.length,
+    torrent.infoHash === focusedInfoHash ? 1 : 0
+  ].join(',')).join('|')
 }
 
 function getTorrentProgress () {
@@ -332,19 +388,7 @@ function getTorrentProgress () {
   // TODO: ideally this would be tracked by WebTorrent, which could do it
   // more efficiently than looping over torrent.bitfield
   const torrentProg = client.torrents.map(torrent => {
-    const fileProg = torrent.files && torrent.files.map(file => {
-      const numPieces = file._endPiece - file._startPiece + 1
-      let numPiecesPresent = 0
-      for (let piece = file._startPiece; piece <= file._endPiece; piece++) {
-        if (torrent.bitfield.get(piece)) numPiecesPresent++
-      }
-      return {
-        startPiece: file._startPiece,
-        endPiece: file._endPiece,
-        numPieces,
-        numPiecesPresent
-      }
-    })
+    const fileProg = fileProgressFor(torrent)
     return {
       torrentKey: torrent.key,
       ready: torrent.ready,
@@ -366,8 +410,70 @@ function getTorrentProgress () {
   }
 }
 
+/**
+ * How much of each file is here.
+ *
+ * For the torrent being looked at, every file. For the rest, only the files
+ * the user asked for, which is all anything else needs to know and keeps a
+ * torrent of tens of thousands of files from costing a second of work every
+ * second.
+ */
+function fileProgressFor (torrent) {
+  const files = torrent.files
+  if (!files) return null
+
+  const cached = fileProgressCache.get(torrent.infoHash)
+  const focused = torrent.infoHash === focusedInfoHash
+  if (cached && cached.downloaded === torrent.downloaded && cached.focused === focused) {
+    return cached.progress
+  }
+
+  const wanted = selectedFiles.get(torrent.infoHash)
+  const progress = new Array(files.length)
+
+  for (let index = 0; index < files.length; index++) {
+    if (!focused && !(wanted && wanted.has(index))) continue
+
+    const file = files[index]
+    const numPieces = file._endPiece - file._startPiece + 1
+    let numPiecesPresent = 0
+    for (let piece = file._startPiece; piece <= file._endPiece; piece++) {
+      if (torrent.bitfield.get(piece)) numPiecesPresent++
+    }
+
+    progress[index] = {
+      startPiece: file._startPiece,
+      endPiece: file._endPiece,
+      numPieces,
+      numPiecesPresent
+    }
+  }
+
+  fileProgressCache.set(torrent.infoHash, {
+    downloaded: torrent.downloaded,
+    focused,
+    progress
+  })
+
+  return progress
+}
+
+// The torrent whose files are on screen, so its progress is reported in full
+function setFocusedTorrent (infoHash) {
+  if (focusedInfoHash === infoHash) return
+
+  // Both the one being left and the one being taken up are worked out again:
+  // one shrinks to the files asked for, the other grows to all of them
+  const before = focusedInfoHash
+  focusedInfoHash = infoHash || null
+  if (before) fileProgressCache.delete(before)
+  if (focusedInfoHash) fileProgressCache.delete(focusedInfoHash)
+  prevSignature = null
+}
+
 function startServer (infoHash) {
   const torrent = client.get(infoHash)
+  trace('startServer', infoHash, 'found', !!torrent, 'ready', torrent ? torrent.ready : null)
   if (!torrent) {
     return console.log('cannot start server: torrent %s is not running', infoHash)
   }
@@ -375,30 +481,64 @@ function startServer (infoHash) {
   else torrent.once('ready', () => startServerFromReadyTorrent(torrent))
 }
 
+/**
+ * One streaming server at a time, and it belongs to one torrent.
+ *
+ * Asking for a file in another torrent takes the old server down and puts a
+ * new one up. Asking again for the torrent already being served answers
+ * straight away, because the player is waiting to be told where the stream
+ * is and would otherwise wait for ever.
+ */
 function startServerFromReadyTorrent (torrent) {
-  if (server) return
+  trace('serverFor', torrent.infoHash, 'existing', serverTorrentHash, 'hasInfo', !!serverInfo)
+  if (server && serverTorrentHash === torrent.infoHash && serverInfo) {
+    return announceServer(torrent.infoHash)
+  }
 
-  // start the streaming torrent-to-http server
-  server = torrent.createServer()
-  server.listen(0, () => {
-    const port = server.address().port
-    const urlSuffix = ':' + port
-    const info = {
+  if (server) stopServer()
+
+  const own = torrent.createServer()
+  server = own
+  serverTorrentHash = torrent.infoHash
+  serverInfo = null
+
+  // A server that fell over is cleared away, so the next file puts up a new
+  // one instead of waiting on a dead one for ever
+  own.on('error', err => {
+    console.log('streaming server error: %o', err)
+    if (server === own) stopServer()
+    ipcRenderer.send('wt-server-failed', torrent.infoHash, err.message)
+  })
+
+  own.listen(0, () => {
+    if (server !== own) return
+
+    const urlSuffix = ':' + own.address().port
+    serverInfo = {
       torrentKey: torrent.key,
       localURL: 'http://localhost' + urlSuffix,
       networkURL: 'http://' + networkAddress() + urlSuffix,
       networkAddress: networkAddress()
     }
 
-    ipcRenderer.send('wt-server-running', info)
-    ipcRenderer.send('wt-server-' + torrent.infoHash, info)
+    announceServer(torrent.infoHash)
   })
 }
 
+function announceServer (infoHash) {
+  trace('announceServer', infoHash, 'hasInfo', !!serverInfo)
+  if (!serverInfo) return
+  ipcRenderer.send('wt-server-running', serverInfo)
+  ipcRenderer.send('wt-server-' + infoHash, serverInfo)
+}
+
 function stopServer () {
+  trace('stopServer', 'had', serverTorrentHash)
   if (!server) return
   const toDestroy = server
   server = null
+  serverTorrentHash = null
+  serverInfo = null
   try {
     toDestroy.destroy()
   } catch (err) {
@@ -475,19 +615,18 @@ function selectFiles (torrentOrInfoHash, selections) {
       'but the torrent contains ' + torrent.files.length + ' files')
   }
 
-  // Remove default selection (whole torrent)
-  torrent.deselect(0, torrent.pieces.length - 1, false)
+  // Drop what was being asked for, including the whole-torrent selection
+  // WebTorrent adds as soon as it reads the metadata
+  clearSelections(torrent)
 
-  // Add selections (individual files)
+  // Ask for the files wanted now, and only those
   const selected = new Set()
   selections.forEach((selection, i) => {
+    if (!selection) return
     const file = torrent.files[i]
-    if (selection) {
-      selected.add(i)
-      file.select()
-    } else {
-      file.deselect()
-    }
+    if (!file) return
+    selected.add(i)
+    file.select()
   })
   selectedFiles.set(torrent.infoHash, selected)
   console.log('torrent %s: downloading %d of %d files',
@@ -555,6 +694,7 @@ function fetchFile (infoHash, index) {
 // alive so that going back to a file watched earlier plays straight away
 // instead of downloading it all over again.
 function stopDownloading (infoHash) {
+  trace('stopDownloading', infoHash)
   selectedFiles.delete(infoHash)
   stopServer()
 
@@ -564,25 +704,57 @@ function stopDownloading (infoHash) {
   console.log('--- STOP DOWNLOADING: %s (keeping %d bytes already fetched)',
     infoHash, torrent.downloaded)
 
-  // Drop every selection, including the whole-torrent one WebTorrent adds when
-  // it first reads the metadata
-  if (torrent.pieces && torrent.pieces.length > 0) {
-    torrent.deselect(0, torrent.pieces.length - 1, false)
+  clearSelections(torrent)
+}
+
+/**
+ * Stops asking for anything at all in this torrent.
+ *
+ * Every selection goes at once. Taking them away one file at a time meant one
+ * call per file, each of which makes WebTorrent go round every connected peer
+ * again: on a torrent of tens of thousands of files that took so long that
+ * nothing else could be played until the app was restarted.
+ */
+function clearSelections (torrent) {
+  const infoHash = torrent.infoHash
+
+  if (Array.isArray(torrent._selections)) {
+    torrent._selections.length = 0
+    if (typeof torrent._updateSelections === 'function') torrent._updateSelections()
+  } else {
+    // Whatever version this is does not keep them where we expect, so fall
+    // back to taking away the ones we know we asked for
+    if (torrent.pieces && torrent.pieces.length > 0) {
+      torrent.deselect(0, torrent.pieces.length - 1, false)
+    }
+    const asked = selectedFiles.get(infoHash)
+    if (asked) {
+      for (const index of asked) {
+        const file = torrent.files[index]
+        if (file) file.deselect()
+      }
+    }
   }
-  torrent.files.forEach(file => file.deselect())
+
   selectedFiles.set(infoHash, new Set())
 }
 
 // The torrent was removed from the list: tear it down and delete the temp files
 // it wrote. Nothing else deletes a torrent's data while the app is running.
 function deleteTorrentData (infoHash) {
+  trace('deleteTorrentData', infoHash)
   const torrent = client.get(infoHash)
   selectedFiles.delete(infoHash)
 
   if (!torrent) return
 
   const dir = torrent.path
-  if (server) server = null // the torrent owns the server and tears it down
+  if (server && serverTorrentHash === infoHash) {
+    // The torrent owns the server and tears it down with itself
+    server = null
+    serverTorrentHash = null
+    serverInfo = null
+  }
 
   if (!isInTempFolder(dir)) {
     // Points at files of the user's own, such as a torrent they created and are
@@ -601,6 +773,7 @@ function deleteTorrentData (infoHash) {
 // cut the app off can never leave files behind, and again on quit.
 // Calls back once every file handle has been closed and the folder is gone.
 function wipeTemp (cb) {
+  trace('wipeTemp')
   cb = cb || (() => {})
   server = null
   selectedFiles.clear()

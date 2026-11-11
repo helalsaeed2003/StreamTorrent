@@ -409,21 +409,14 @@ module.exports = class PlaybackController {
     // starts out waiting again every time the user steps to another one
     if (state.playing.type === 'image') state.playing.imageLoaded = false
 
-    // Pick up where we left off, a few seconds earlier for context. This
-    // applies whether or not the file is still in the temp folder: the position
-    // is saved alongside the magnet link, not with the downloaded data.
+    // Always start at the beginning, and offer to jump to where the user left
+    // off. The position is saved alongside the magnet link, not with the
+    // downloaded data, so it is there whether or not the file still is.
     const resumeTime = PlaybackPosition.getResumeTime(fileSummary)
-    state.playing.jumpToTime = resumeTime
-
-    // Tell the user we did it, and offer to start from the beginning instead
-    state.playing.resumedFrom = resumeTime > 0 ? fileSummary.currentTime : null
-
-    if (resumeTime > 0) {
-      // Fetch the pieces around the resume point first, rather than starting
-      // the download at the beginning of a file we are not going to watch yet
-      ipcRenderer.send('wt-prioritize-position',
-        infoHash, index, resumeTime, fileSummary.duration)
-    }
+    state.playing.jumpToTime = 0
+    state.playing.resumedFrom = null
+    state.playing.resumeOffer = resumeTime > 0 ? resumeTime : null
+    state.playing.resumeOfferedAt = resumeTime > 0 ? Date.now() : 0
 
     // Put back the audio track, subtitle and subtitle timing chosen for this
     // video last time
@@ -599,11 +592,22 @@ module.exports = class PlaybackController {
   // Start the current video again from the beginning
   startOver () {
     this.state.playing.resumedFrom = null
+    this.state.playing.resumeOffer = null
     this.skipTo(0)
+  }
+
+  // Take up the offer: jump to where this video was left off
+  resumeFromOffer () {
+    const at = this.state.playing.resumeOffer
+    this.state.playing.resumeOffer = null
+    if (at == null) return
+    this.state.playing.resumedFrom = null
+    this.skipTo(at)
   }
 
   dismissResumeNote () {
     this.state.playing.resumedFrom = null
+    this.state.playing.resumeOffer = null
   }
 
   // Stops fetching the file we were watching. The data stays in the temp folder

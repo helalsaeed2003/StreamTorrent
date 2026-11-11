@@ -251,8 +251,22 @@ function update () {
   // The header and the controls are drawn over the video, in a window of
   // their own, for the same reason
   PlayerChrome.sync(state)
+
+  // Which torrent's files are on screen. The torrent process works out how
+  // much of every file of that one is here, and only the files asked for in
+  // the rest: a torrent can hold tens of thousands of files, and doing all of
+  // them every second leaves it no time to answer anything else.
+  const focused = state.playing.infoHash || state.selectedInfoHash || null
+  if (focused !== lastFocusedTorrent) {
+    lastFocusedTorrent = focused
+    ipcRenderer.send('wt-focus-torrent', focused)
+  }
+
   updateElectron()
 }
+
+// The torrent whose file progress is worked out in full
+let lastFocusedTorrent = null
 
 // Some state changes can't be reflected in the DOM, instead we have to
 // tell the main process to update the window or OS integrations
@@ -305,7 +319,9 @@ const dispatchHandlers = {
   toggleFind: () => {
     // Only worth anything while a torrent is open: it searches that torrent
     if (!state.selectedInfoHash) return
+    if (state.find.active) rememberSearch()
     state.find.active = !state.find.active
+    state.find.historyOpen = false
     if (!state.find.active) state.find.query = ''
   },
   startDraggingTorrent: (infoHash) => {
@@ -324,7 +340,25 @@ const dispatchHandlers = {
     state.find.active = true
     state.find.query = ''
   },
-  setFindQuery: (query) => { state.find.query = query },
+  setFindQuery: (query) => {
+    state.find.query = query
+    state.find.historyOpen = false
+  },
+  // The list of what was searched for before, under the search box
+  toggleSearchHistory: () => {
+    state.find.historyOpen = !state.find.historyOpen
+  },
+  useSearchHistory: (query) => {
+    state.find.query = query
+    state.find.historyOpen = false
+    rememberSearch()
+  },
+  forgetSearchHistory: () => {
+    state.saved.searchHistory = []
+    state.find.historyOpen = false
+    dispatch('stateSave')
+  },
+  rememberSearch: () => rememberSearch(),
   openTextContextMenu: () => showContextMenu([
     { role: 'cut' },
     { role: 'copy' },
@@ -334,7 +368,9 @@ const dispatchHandlers = {
     { role: 'selectAll' }
   ]),
   closeFind: () => {
+    rememberSearch()
     state.find.active = false
+    state.find.historyOpen = false
     state.find.query = ''
   },
   toggleSelectTorrent: (infoHash) =>
@@ -370,6 +406,7 @@ const dispatchHandlers = {
   mpvMaybeLoad: () => controllers.playback().loadIntoMpv(),
   startOver: () => controllers.playback().startOver(),
   dismissResumeNote: () => controllers.playback().dismissResumeNote(),
+  resumeFromOffer: () => controllers.playback().resumeFromOffer(),
   clearFileProgress: (infoHash, index) =>
     controllers.torrentList().clearFileProgress(infoHash, index),
   toggleFileWatched: (infoHash, index) =>
@@ -510,6 +547,12 @@ function setupIpc () {
   })
   ipcRenderer.on('wt-audio-metadata', (e, ...args) => tc.torrentAudioMetadata(...args))
   ipcRenderer.on('wt-server-running', (e, ...args) => tc.torrentServerRunning(...args))
+  // The stream could not be put up. Say so, rather than leaving the player
+  // waiting for a video that is never going to arrive.
+  ipcRenderer.on('wt-server-failed', (e, infoHash, message) => {
+    dispatch('error', 'Could not start playing: ' + message)
+    dispatch('backToList')
+  })
   ipcRenderer.on('wt-file-ready', (e, ...args) =>
     controllers.subtitles().subtitleFileReady(...args))
 
@@ -578,6 +621,29 @@ function resumeTorrents () {
       s.status = needsMetadata ? 'new' : 'paused'
       if (needsMetadata) controllers.torrentList().startTorrentingSummary(s.torrentKey)
     })
+}
+
+// How many past searches the box remembers
+const SEARCH_HISTORY_LENGTH = 12
+
+/**
+ * Keeps what was searched for, so the box can offer it again. The newest is
+ * first, and searching for the same thing twice moves it up rather than
+ * listing it twice.
+ */
+function rememberSearch () {
+  const query = String(state.find.query || '').trim()
+  if (!query) return
+
+  const history = Array.isArray(state.saved.searchHistory)
+    ? state.saved.searchHistory
+    : []
+
+  const kept = history.filter(entry => entry.toLowerCase() !== query.toLowerCase())
+  kept.unshift(query)
+  state.saved.searchHistory = kept.slice(0, SEARCH_HISTORY_LENGTH)
+
+  dispatch('stateSave')
 }
 
 // Set window dimensions to match video dimensions or fill the screen

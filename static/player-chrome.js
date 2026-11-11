@@ -16,12 +16,18 @@ document.body.classList.add('part-' + part)
 const headerBar = document.getElementById('header')
 const controlsBar = document.getElementById('controls')
 const tip = document.getElementById('tip')
+const resume = document.getElementById('resume')
 
-// Each window keeps only its own half of the page
+// Each window keeps only its own piece of the page
 if (part === 'preview') {
   document.getElementById('app').remove()
+  resume.remove()
+} else if (part === 'resume') {
+  document.getElementById('app').remove()
+  tip.remove()
 } else {
   tip.remove()
+  resume.remove()
   if (part === 'header') controlsBar.remove()
   else headerBar.remove()
 }
@@ -36,8 +42,26 @@ let shown = {}
 // While the seek bar is being dragged, the time under the pointer
 let scrubbing = null
 
+// Whether the handle is being held, and when the video was last told to move:
+// dragging asks for a lot of these, and mpv has better things to do
+let dragging = false
+let lastSeek = 0
+const SEEK_EVERY = 90
+
+function seekTo (fraction, now) {
+  const duration = shown.duration || 0
+  if (!duration) return
+  const at = Date.now()
+  if (!now && at - lastSeek < SEEK_EVERY) return
+  lastSeek = at
+  act('skipTo', fraction * duration)
+}
+
 ipcRenderer.on('player-chrome-data', (e, data) => draw(data))
 ipcRenderer.on('player-chrome-preview', (e, text) => { tip.textContent = text })
+ipcRenderer.on('player-chrome-resume', (e, text) => {
+  document.getElementById('resume-text').textContent = 'You stopped at ' + text
+})
 
 function act (action, ...args) {
   ipcRenderer.send('player-chrome-action', action, args)
@@ -75,6 +99,7 @@ const parts = {}
 
 function build () {
   if (part === 'preview') return
+  if (part === 'resume') return buildResume()
   if (part === 'header') return buildHeader()
 
   const bar = el('div', 'playback-bar')
@@ -89,16 +114,42 @@ function build () {
   bar.appendChild(parts.scrub)
   controls.appendChild(bar)
 
-  parts.scrub.addEventListener('mousemove', e => {
+  // The handle can be taken hold of and dragged along the bar, not only
+  // pressed: while it is held the pointer is followed even past the ends of
+  // the seek bar, and the video keeps up with it
+  parts.scrub.addEventListener('pointerdown', e => {
+    dragging = true
+    scrubbing = fractionAt(e.clientX)
+    try {
+      parts.scrub.setPointerCapture(e.pointerId)
+    } catch (err) {}
+    drawPreview()
+    seekTo(scrubbing, true)
+  })
+
+  parts.scrub.addEventListener('pointermove', e => {
     scrubbing = fractionAt(e.clientX)
     drawPreview()
+    if (dragging) seekTo(scrubbing, false)
   })
+
+  const letGo = e => {
+    if (!dragging) return
+    dragging = false
+    try {
+      parts.scrub.releasePointerCapture(e.pointerId)
+    } catch (err) {}
+    // Land exactly where the pointer was let go, whatever the last one skipped
+    seekTo(fractionAt(e.clientX), true)
+  }
+
+  parts.scrub.addEventListener('pointerup', letGo)
+  parts.scrub.addEventListener('pointercancel', letGo)
+
   parts.scrub.addEventListener('mouseout', () => {
+    if (dragging) return
     scrubbing = null
     hover(false)
-  })
-  parts.scrub.addEventListener('mousedown', e => {
-    act('skipTo', fractionAt(e.clientX) * (shown.duration || 0))
   })
 
   parts.previous = icon('skip_previous', 'skip-previous float-left', 'Previous',
@@ -145,6 +196,14 @@ function build () {
   controls.appendChild(parts.audio)
 
   listen()
+}
+
+// The offer to jump to where the video was left off
+function buildResume () {
+  document.getElementById('resume-go')
+    .addEventListener('click', () => act('resumeFromOffer'))
+  document.getElementById('resume-close')
+    .addEventListener('click', () => act('dismissResumeNote'))
 }
 
 // The header is just the way back and the name of what is playing

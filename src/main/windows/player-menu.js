@@ -61,9 +61,11 @@ function create () {
     skipTaskbar: true,
     hasShadow: false,
     backgroundColor: '#202020',
-    // Never take focus: the keyboard stays with the main window, so the app's
-    // hotkeys keep working while the menu is up
-    focusable: false,
+    // The menu can be given focus, so that its sliders can be dragged and its
+    // buttons pressed while the app is in the background. A window that cannot
+    // be given focus is never activated by a click, and on Windows the press
+    // is swallowed. The focus goes back to the player when the menu closes.
+    focusable: true,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -98,6 +100,12 @@ function watch (main) {
   main.on('blur', () => {
     if (!open) return
     if (Date.now() - openedAt < SETTLE_MS) return
+
+    // Using the menu itself takes the focus off the player: that is not
+    // looking at something else
+    const focused = BrowserWindow.getFocusedWindow()
+    if (focused && (focused === playerMenu.win || main.getChildWindows().includes(focused))) return
+
     hide()
     main.webContents.send('player-menu-closed')
   })
