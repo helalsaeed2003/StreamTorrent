@@ -16,6 +16,7 @@ const zip = require('cross-zip')
 
 const config = require('../src/config')
 const pkg = require('../package.json')
+const trim = require('./trim')
 
 const BUILD_NAME = config.APP_NAME + '-v' + config.APP_VERSION
 const BUILD_PATH = path.join(config.ROOT_PATH, 'build')
@@ -188,7 +189,7 @@ const all = {
 
   // Pattern which specifies which files to ignore when copying files to create the
   // package(s).
-  ignore: /^\/src|^\/dist|^\/Temp|^\/vendor|\/(appveyor.yml|\.appveyor.yml|\.github|appdmg|AUTHORS|CONTRIBUTORS|bench|benchmark|benchmark\.js|bin|bower\.json|component\.json|coverage|doc|docs|docs\.mli|dragdrop\.min\.js|example|examples|example\.html|example\.js|externs|ipaddr\.min\.js|Makefile|min|minimist|perf|rusha|simplepeer\.min\.js|simplewebsocket\.min\.js|static\/screenshot\.png|test|tests|test\.js|tests\.js|webtorrent\.min\.js|\.[^/]*|.*\.md|.*\.markdown)$/,
+  ignore: /\/node_modules\/@types\/|\/node_modules\/protobufjs\/dist\/|\/node_modules\/react-dom\/umd\/|\/node_modules\/core-js\/client\/|\/node_modules\/webtorrent\/webtorrent\.chromeapp\.js$|\/prebuilds\/(darwin|linux|android|win32-ia32|win32-arm64)|^\/src|^\/dist|^\/Temp|^\/vendor|\/(appveyor.yml|\.appveyor.yml|\.github|appdmg|AUTHORS|CONTRIBUTORS|bench|benchmark|benchmark\.js|bin|bower\.json|component\.json|coverage|doc|docs|docs\.mli|dragdrop\.min\.js|example|examples|example\.html|example\.js|externs|ipaddr\.min\.js|Makefile|min|minimist|perf|rusha|simplepeer\.min\.js|simplewebsocket\.min\.js|static\/screenshot\.png|test|tests|test\.js|tests\.js|webtorrent\.min\.js|\.[^/]*|.*\.md|.*\.markdown)$/,
 
   // The application name.
   name: config.APP_NAME,
@@ -204,7 +205,16 @@ const all = {
   prune: true,
 
   // The Electron version that the app is built with (without the leading 'v')
-  electronVersion: require('electron/package.json').version
+  electronVersion: require('electron/package.json').version,
+
+  // Chromium's own menus and dialogs come translated into 55 languages,
+  // which is 34 MB of a build that is not translated into any of them
+  afterExtract: [
+    (buildPath, electronVersion, platform, arch, callback) => {
+      trim.removeOtherLanguages(buildPath, message => console.log(message))
+      callback()
+    }
+  ]
 }
 
 const darwin = {
