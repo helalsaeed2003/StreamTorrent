@@ -246,10 +246,13 @@ function apply (choice, win) {
       !!choice.fileHandler)
   }
 
-  // Registering is not enough on Windows 10: an extension another program has
-  // already been chosen for keeps that choice until the user changes it
-  // themselves, in Settings. Take them there rather than quietly doing nothing.
-  if (choice.fileHandler && handlers.isOverriddenWin32('.torrent')) {
-    setTimeout(() => handlers.openDefaultAppsSettings(), 400)
+  // Registering is not enough once another program has been chosen for
+  // torrent files or magnet links: Windows keeps using that choice until it
+  // is cleared. Anything that cannot be cleared is left to Windows' own
+  // screen rather than quietly doing nothing.
+  if (choice.fileHandler) {
+    const left = handlers.clearChosenHandlersWin32(handlers.ASSOCIATIONS)
+    log('still chosen elsewhere: ' + (left.join(', ') || 'nothing'))
+    if (left.length > 0) setTimeout(() => handlers.openDefaultAppsSettings(), 400)
   }
 }
