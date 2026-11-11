@@ -495,8 +495,12 @@ module.exports = class TorrentList extends React.Component {
               else dispatch('closeFind')
             }
             if (e.key === 'Enter') {
+              // The search is made as it is typed, so Enter is the user
+              // saying they are done: keep it, and let the box go, rather
+              // than leaving the cursor sitting in it
               dispatch('rememberSearch')
               dispatch('closeSearchHistory')
+              e.target.blur()
             }
             if (e.key === 'ArrowDown') dispatch('toggleSearchHistory')
             e.stopPropagation()
