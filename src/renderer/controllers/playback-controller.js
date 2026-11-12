@@ -437,7 +437,9 @@ module.exports = class PlaybackController {
     state.playing.jumpToTime = 0
     state.playing.resumedFrom = null
     state.playing.resumeOffer = resumeTime > 0 ? resumeTime : null
-    state.playing.resumeOfferedAt = resumeTime > 0 ? Date.now() : 0
+    // Nothing is counted down yet: the offer is not shown, and does not
+    // start timing out, until the video is actually there to jump into
+    state.playing.resumeOfferedAt = 0
 
     // Put back the audio track, subtitle and subtitle timing chosen for this
     // video last time
@@ -611,6 +613,27 @@ module.exports = class PlaybackController {
     const fileSummary = this.state.getPlayingFileSummary()
     PlaybackPosition.markFinished(fileSummary)
     dispatch('stateSave')
+  }
+
+  /**
+   * Starts the clock on the offer to jump back to where a video was left
+   * off, once there is a video to jump into.
+   *
+   * A file that has not been opened in a while can sit on a black screen
+   * for a long time while enough of it arrives. The offer used to be timed
+   * from the moment the file was picked, so it had come and gone before
+   * the picture did. It waits for the length of the video instead, which
+   * is the first thing known about it once it has loaded.
+   */
+  startResumeOffer () {
+    const playing = this.state.playing
+    if (playing.resumeOffer == null) return
+    if (playing.resumeOfferedAt > 0) return
+    if (!(playing.duration > 0)) return
+    // A video opened while another was playing still has the old one's
+    // length until mpv reports the new one, so wait to hear it has the file
+    if (usesMpv(this.state) && !playing.mpvLoaded) return
+    playing.resumeOfferedAt = Date.now()
   }
 
   // Start the current video again from the beginning

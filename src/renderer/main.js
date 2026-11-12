@@ -231,6 +231,10 @@ function lazyLoadCast () {
 function update () {
   controllers.playback().showOrHidePlayerControls()
 
+  // The offer to jump back to where a video was left off waits for the
+  // video to load, so a file that takes a while to arrive still gets it
+  controllers.playback().startResumeOffer()
+
   // React drops the ref if a render throws, and update() runs on a timer, so
   // without this one bad render would leave the app throwing here every second
   // with a dead window. Skip the repaint instead and let the next one recover.

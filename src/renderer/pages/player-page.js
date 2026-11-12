@@ -468,6 +468,8 @@ function renderImageControls (state) {
 function renderResumeNote (state) {
   const offer = state.playing.resumeOffer
   if (offer == null) return
+  // Not until the video has loaded and its length is known
+  if (!state.playing.resumeOfferedAt) return
 
   return (
     <div key='resume-note' className='resume-note'>
