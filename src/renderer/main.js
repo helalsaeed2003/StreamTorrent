@@ -469,6 +469,7 @@ const dispatchHandlers = {
 
   // Preferences screen
   preferences: () => controllers.prefs().show(),
+  rememberPreferences: (changes) => controllers.prefs().remember(changes),
   updatePreferences: (key, value) => controllers.prefs().update(key, value),
   resetTempFolder: () => controllers.prefs().resetTempFolder(),
   refreshTempUsage: () => controllers.prefs().refreshTempUsage(),

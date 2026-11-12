@@ -36,10 +36,10 @@ function install () {
 function uninstall () {
   switch (process.platform) {
     case 'darwin': uninstallDarwin()
-      break
-    case 'win32': uninstallWin32()
-      break
+      return Promise.resolve()
+    case 'win32': return uninstallWin32()
   }
+  return Promise.resolve()
 }
 
 function installDarwin () {
@@ -341,10 +341,10 @@ function isOverriddenWin32 (what) {
  * Only ever called when the user asks for it. Returns the ones it could not
  * take, so the caller can fall back to asking Windows.
  */
-function takeAssociationsWin32 () {
+async function takeAssociationsWin32 () {
   if (process.platform !== 'win32') return ASSOCIATIONS.map(a => a.what)
 
-  const taken = require('./user-choice').take(ASSOCIATIONS)
+  const taken = await require('./user-choice').take(ASSOCIATIONS)
   require('./log')('could not take: ' + (taken.join(', ') || 'nothing'))
 
   return taken
@@ -357,13 +357,13 @@ function openDefaultAppsSettings () {
   shell.openExternal('ms-settings:defaultapps').catch(() => {})
 }
 
-function uninstallWin32 () {
+async function uninstallWin32 () {
   const Registry = require('winreg')
 
   // Hand back what Windows records as ours before the registrations go, or
   // the choice would point at a program that no longer claims anything
   try {
-    require('./user-choice').release(ASSOCIATIONS)
+    await require('./user-choice').release(ASSOCIATIONS)
   } catch (err) {
     require('./log').error('could not hand the associations back: ' + err.message)
   }

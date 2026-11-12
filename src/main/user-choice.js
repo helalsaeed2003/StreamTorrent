@@ -23,7 +23,7 @@
  */
 
 const crypto = require('crypto')
-const { execFileSync } = require('child_process')
+const { execFile } = require('child_process')
 
 module.exports = {
   hashFor,
@@ -142,10 +142,10 @@ function hashFor (what, userSid, progId, fileTime) {
  * Windows 10 builds from February 2024 carry a driver that refuses writes to
  * these keys outright. Where it is running, none of this works.
  */
-function isProtected () {
+async function isProtected () {
   if (process.platform !== 'win32') return true
   try {
-    const out = run([
+    const out = await run([
       '$s = Get-Service UCPD -ErrorAction SilentlyContinue',
       'if ($s -and $s.Status -eq "Running") { "yes" } else { "no" }'
     ].join('\n'))
@@ -155,12 +155,21 @@ function isProtected () {
   }
 }
 
+// Each of these starts a PowerShell, which takes a few tenths of a second.
+// Waiting for it would stop the whole app: the window would not redraw and
+// nothing on it would answer until every one of them had finished.
 function run (script) {
-  return execFileSync(
-    'powershell.exe',
-    ['-NoProfile', '-NonInteractive', '-Command', script],
-    { encoding: 'utf8', windowsHide: true, timeout: 30000 }
-  )
+  return new Promise((resolve, reject) => {
+    execFile(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command', script],
+      { encoding: 'utf8', windowsHide: true, timeout: 30000 },
+      (err, stdout) => {
+        if (err) reject(err)
+        else resolve(stdout)
+      }
+    )
+  })
 }
 
 // Reading a registry key's last-write time, and writing a key the user has
@@ -214,8 +223,8 @@ const HELPERS = [
  * Starts a fresh, writable UserChoice key and says when it was made, so the
  * hash can be worked out for that minute.
  */
-function prepare (keyPath) {
-  const out = run([
+async function prepare (keyPath) {
+  const out = await run([
     HELPERS,
     '$ErrorActionPreference = "SilentlyContinue"',
     '$path = ' + quote(keyPath),
@@ -238,8 +247,8 @@ function prepare (keyPath) {
  * Writes the choice, and says when Windows recorded the key as last written,
  * which has to land in the same minute the hash was worked out for.
  */
-function commit (keyPath, progId, hash) {
-  const out = run([
+async function commit (keyPath, progId, hash) {
+  const out = await run([
     HELPERS,
     '$ErrorActionPreference = "SilentlyContinue"',
     '$path = ' + quote(keyPath),
@@ -256,9 +265,9 @@ function commit (keyPath, progId, hash) {
 }
 
 /** Tells Explorer to stop using the associations it had cached. */
-function announce () {
+async function announce () {
   try {
-    run([
+    await run([
       HELPERS,
       // SHCNE_ASSOCCHANGED, SHCNF_IDLIST
       '[StreamTorrent.Reg]::SHChangeNotify(0x08000000, 0, [IntPtr]::Zero, [IntPtr]::Zero)'
@@ -291,15 +300,15 @@ function warn (message) {
  * Returns true once the key holds a hash that matches what Windows will work
  * out for itself.
  */
-function takeOne (what, progId, attempts = 3) {
+async function takeOne (what, progId, attempts = 3) {
   const keyPath = keyPathFor(what)
 
   for (let i = 0; i < attempts; i++) {
-    const { sid, fileTime } = prepare(keyPath)
+    const { sid, fileTime } = await prepare(keyPath)
     const hash = hashFor(what, sid, progId, fileTime)
     if (!hash) return false
 
-    const written = commit(keyPath, progId, hash)
+    const written = await commit(keyPath, progId, hash)
     if (written === 0n) return false
 
     // The hash only covers whole minutes, so the write may land in the same
@@ -318,7 +327,7 @@ function takeOne (what, progId, attempts = 3) {
  * program is left alone. Windows then asks the next time, which is the right
  * thing: we are no longer claiming it.
  */
-function release (items) {
+async function release (items) {
   if (process.platform !== 'win32') return
 
   let gaveBack = false
@@ -327,7 +336,7 @@ function release (items) {
     const keyPath = keyPathFor(what)
     let held = false
     try {
-      held = run([
+      held = (await run([
         HELPERS,
         '$ErrorActionPreference = "SilentlyContinue"',
         '$k = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey(' + quote(keyPath) + ', $false)',
@@ -335,7 +344,7 @@ function release (items) {
         '  $p = $k.GetValue("ProgId"); $k.Close()',
         '  if ($p -eq ' + quote(progId) + ') { "yes" } else { "no" }',
         '}'
-      ].join('\n')).trim() === 'yes'
+      ].join('\n'))).trim() === 'yes'
     } catch (err) {
       warn('could not look at what opens ' + what + ': ' + err.message)
     }
@@ -343,7 +352,7 @@ function release (items) {
     if (!held) continue
 
     try {
-      run([
+      await run([
         HELPERS,
         '$ErrorActionPreference = "SilentlyContinue"',
         '$path = ' + quote(keyPath),
@@ -356,29 +365,29 @@ function release (items) {
     }
   }
 
-  if (gaveBack) announce()
+  if (gaveBack) await announce()
 }
 
 /**
  * Takes over a list of extensions and protocols. Returns the ones it could
  * not take, so the caller can fall back to asking Windows.
  */
-function take (items) {
+async function take (items) {
   if (process.platform !== 'win32') return items.slice()
-  if (isProtected()) return items.slice()
+  if (await isProtected()) return items.slice()
 
   const failed = []
   for (const { what, progId } of items) {
     let ok = false
     try {
-      ok = takeOne(what, progId)
+      ok = await takeOne(what, progId)
     } catch (err) {
       warn('could not take ' + what + ': ' + err.message)
     }
     if (!ok) failed.push(what)
   }
 
-  if (failed.length < items.length) announce()
+  if (failed.length < items.length) await announce()
 
   return failed
 }

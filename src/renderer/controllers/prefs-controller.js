@@ -28,6 +28,20 @@ module.exports = class PrefsController {
     })
   }
 
+  /**
+   * Writes down settings that have already been carried out elsewhere.
+   *
+   * The setup window does the shortcuts and the file associations itself,
+   * in the main process, and then says what it did. Going through update()
+   * would send it all back to the main process to be done a second time -
+   * which, for the associations, means another handful of seconds of
+   * Windows being asked the same questions.
+   */
+  remember (changes) {
+    Object.assign(this.state.saved.prefs, changes)
+    dispatch('stateSave')
+  }
+
   // Updates a single property in the saved prefs
   // For example: updatePreferences('isFileHandler', true)
   update (property, value) {

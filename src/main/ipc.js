@@ -264,18 +264,22 @@ function init () {
    * File handlers
    */
 
-  ipcMain.on('setDefaultFileHandler', (e, flag) => {
+  ipcMain.on('setDefaultFileHandler', async (e, flag) => {
     const handlers = require('./handlers')
 
-    if (flag) handlers.install()
-    else handlers.uninstall()
+    try {
+      if (flag) handlers.install()
+      else await handlers.uninstall()
 
-    // Registering is not enough: Windows keeps the choice the user last made
-    // and that choice wins, so it has to be written too. Anything that cannot
-    // be written is left to Windows' own screen.
-    if (flag) {
-      const left = handlers.takeAssociationsWin32()
-      if (left.length > 0) setTimeout(() => handlers.openDefaultAppsSettings(), 400)
+      // Registering is not enough: Windows keeps the choice the user last
+      // made and that choice wins, so it has to be written too. Anything
+      // that cannot be written is left to Windows' own screen.
+      if (flag) {
+        const left = await handlers.takeAssociationsWin32()
+        if (left.length > 0) setTimeout(() => handlers.openDefaultAppsSettings(), 400)
+      }
+    } catch (err) {
+      log('could not change what opens torrent files: ' + err.message)
     }
   })
 

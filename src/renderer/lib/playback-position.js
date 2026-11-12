@@ -95,6 +95,12 @@ function recordPosition (file, currentTime, duration) {
     return true
   }
 
+  // Watching a finished video again puts it back among the unfinished once
+  // the user is properly into it. Without this the mark stayed on for good:
+  // the offer to pick up where they left off never came back, and the video
+  // never returned to Continue watching, however far in they got.
+  if (file.finished && hasProgress(file)) file.finished = false
+
   return false
 }
 

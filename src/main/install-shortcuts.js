@@ -153,7 +153,10 @@ function reconcile (prefs, win) {
   set('startMenu', want.startMenu)
 
   if (prefs.shortcutDesktop == null || prefs.shortcutStartMenu == null) {
-    remember(want, win)
+    remember(
+      { shortcutDesktop: want.desktop, shortcutStartMenu: want.startMenu },
+      win
+    )
   }
 }
 
@@ -165,12 +168,11 @@ function removeAll () {
   set('startMenu', false)
 }
 
-function remember (want, win) {
+// Tells the page what was settled here, in one go. These are written down
+// rather than acted on again: the work has already been done.
+function remember (changes, win) {
   if (!win || win.isDestroyed()) return
-  win.webContents.send('dispatch', 'updatePreferences', 'shortcutDesktop',
-    want.desktop)
-  win.webContents.send('dispatch', 'updatePreferences', 'shortcutStartMenu',
-    want.startMenu)
+  win.webContents.send('dispatch', 'rememberPreferences', changes)
 }
 
 /**
@@ -207,8 +209,11 @@ function askOnFirstRun (win) {
   chooser.once('ready-to-show', () => chooser.show())
 
   ipcMain.once('first-run-choice', (e, choice) => {
-    apply(choice, win)
+    // The window goes first. What follows asks Windows a string of
+    // questions that take a moment each, and leaving the setup box sitting
+    // there until they are answered looks like it has stopped responding.
     if (!chooser.isDestroyed()) chooser.close()
+    apply(choice, win).catch(err => log('could not finish setting up', err))
   })
 
   // Closing the window without answering leaves nothing behind: none of the
@@ -218,41 +223,46 @@ function askOnFirstRun (win) {
   })
 }
 
-function apply (choice, win) {
+async function apply (choice, win) {
   clearSquirrelShortcuts()
 
   const want = { desktop: !!choice.desktop, startMenu: !!choice.startMenu }
   set('desktop', want.desktop)
   set('startMenu', want.startMenu)
-  remember(want, win)
 
   log('shortcuts kept: ' +
     (Object.keys(want).filter(k => want[k]).join(',') || 'none'))
+
+  // What was chosen, written down once rather than three times over
+  remember({
+    shortcutDesktop: want.desktop,
+    shortcutStartMenu: want.startMenu,
+    isFileHandler: !!choice.fileHandler
+  }, win)
+
+  // Nothing of ours has been registered yet on a first run, so there is
+  // nothing to unregister: saying no means leaving everything alone
+  if (!choice.fileHandler) {
+    log('torrent files and magnet links: left alone')
+    return
+  }
 
   // Registered here rather than left to the page: what was asked for happens
   // whether or not the page is listening by now
   const handlers = require('./handlers')
   try {
-    if (choice.fileHandler) handlers.install()
-    else handlers.uninstall()
-    log('torrent files and magnet links: ' + (choice.fileHandler ? 'ours' : 'left alone'))
+    handlers.install()
+    log('torrent files and magnet links: ours')
   } catch (err) {
     log('could not register the handlers', err)
-  }
-
-  // The page keeps the preference, so Preferences shows what was chosen
-  if (win && !win.isDestroyed()) {
-    win.webContents.send('dispatch', 'updatePreferences', 'isFileHandler',
-      !!choice.fileHandler)
+    return
   }
 
   // Registering is not enough: Windows keeps the choice the user last made
   // and that choice wins, so it has to be written too. Anything that cannot
   // be written is left to Windows' own screen rather than quietly doing
   // nothing.
-  if (choice.fileHandler) {
-    const left = handlers.takeAssociationsWin32()
-    log('still chosen elsewhere: ' + (left.join(', ') || 'nothing'))
-    if (left.length > 0) setTimeout(() => handlers.openDefaultAppsSettings(), 400)
-  }
+  const left = await handlers.takeAssociationsWin32()
+  log('still chosen elsewhere: ' + (left.join(', ') || 'nothing'))
+  if (left.length > 0) setTimeout(() => handlers.openDefaultAppsSettings(), 400)
 }
