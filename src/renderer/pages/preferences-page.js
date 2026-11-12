@@ -329,9 +329,14 @@ class PreferencesPage extends React.Component {
             properties: ['openDirectory']
           }}
           onChange={(filePath) => dispatch('updatePreferences', 'updateFolder', filePath)}
-          title='New builds folder'
+          title='Folder to check for new builds'
           value={updateFolder}
         />
+        <p>
+          Optional. Help &gt; Check for a New Build looks here for a newer
+          build of {config.APP_NAME} and swaps it in, keeping your torrents and
+          settings. Leave it empty and nothing is checked.
+        </p>
       </Preference>
     )
   }
