@@ -36,7 +36,6 @@ function getDefaultState () {
     server: null, /* local WebTorrent-to-HTTP server */
     prev: { /* used for state diffing in updateElectron() */
       title: null,
-      progress: -1,
       badge: null
     },
     location: new LocationHistory(),
@@ -50,8 +49,7 @@ function getDefaultState () {
     playing: getDefaultPlayState(), /* the media (audio or video) that we're currently playing */
     devices: {}, /* playback devices like Chromecast and AppleTV */
     dock: {
-      badge: 0,
-      progress: 0
+      badge: 0
     },
     modal: null, /* modal popover */
     errors: [], /* user-facing errors */

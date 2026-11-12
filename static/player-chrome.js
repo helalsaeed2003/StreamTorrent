@@ -97,6 +97,36 @@ function formatTime (seconds, total) {
 // The bars, built once; drawing only updates what is in them
 const parts = {}
 
+/**
+ * Draws the stretches of the file that are here, over the track. The elements
+ * are kept between draws and only moved, so this runs several times a second
+ * without making work for the browser.
+ */
+function drawLoaded (ranges) {
+  while (parts.loaded.length < ranges.length) {
+    const piece = el('div', 'loading-bar-part')
+    parts.loading.appendChild(piece)
+    parts.loaded.push(piece)
+  }
+
+  for (let i = 0; i < parts.loaded.length; i++) {
+    const piece = parts.loaded[i]
+    const range = ranges[i]
+
+    if (!range) {
+      piece.style.display = 'none'
+      continue
+    }
+
+    const from = Math.max(0, Math.min(1, range[0]))
+    const to = Math.max(from, Math.min(1, range[1]))
+
+    piece.style.display = ''
+    piece.style.left = (from * 100) + '%'
+    piece.style.width = ((to - from) * 100) + '%'
+  }
+}
+
 function build () {
   if (part === 'preview') return
   if (part === 'resume') return buildResume()
@@ -104,9 +134,9 @@ function build () {
 
   const bar = el('div', 'playback-bar')
   parts.loading = el('div', 'loading-bar')
-  // The red part of the track: how much of the file is here to play
-  parts.loaded = el('div', 'loading-bar-part')
-  parts.loading.appendChild(parts.loaded)
+  // The red parts of the track: the stretches of the file that are here to
+  // play. There can be more than one, since a seek starts a new one.
+  parts.loaded = []
   parts.cursor = el('div', 'playback-cursor')
   parts.scrub = el('div', 'scrub-bar')
   bar.appendChild(parts.loading)
@@ -287,7 +317,7 @@ function draw (data) {
 
   const fraction = shown.duration > 0 ? shown.currentTime / shown.duration : 0
   parts.cursor.style.left = 'calc(' + (fraction * 100) + '% - 3px)'
-  parts.loaded.style.width = (shown.bufferedFraction || 0) * 100 + '%'
+  drawLoaded(shown.bufferedRanges || [])
 
   // Nothing is under the pointer once the bars are gone
   if (!shown.visible && hovering) hover(false)

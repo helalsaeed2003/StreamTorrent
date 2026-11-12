@@ -275,10 +275,6 @@ function updateElectron () {
     state.prev.title = state.window.title
     ipcRenderer.send('setTitle', state.window.title)
   }
-  if (state.dock.progress.toFixed(2) !== state.prev.progress.toFixed(2)) {
-    state.prev.progress = state.dock.progress
-    ipcRenderer.send('setProgress', state.dock.progress)
-  }
   if (state.dock.badge !== state.prev.badge) {
     state.prev.badge = state.dock.badge
     ipcRenderer.send('setBadge', state.dock.badge || 0)

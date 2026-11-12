@@ -54,9 +54,10 @@ function payloadFor (state) {
   const torrentSummary = state.getPlayingTorrentSummary()
   const fileProgress = torrentSummary && torrentSummary.progress &&
     torrentSummary.progress.files && torrentSummary.progress.files[playing.fileIndex]
-  const bufferedFraction = fileProgress && fileProgress.numPieces > 0
-    ? fileProgress.numPiecesPresent / fileProgress.numPieces
-    : 0
+  // Which stretches of it are here, rather than one number counted from the
+  // start: after a seek the file fills in around the new position, so a bar
+  // growing from the left would sit still while the video plays
+  const bufferedRanges = (fileProgress && fileProgress.ranges) || []
 
   // The offer to jump to where this video was left off, which times out
   const offer = playing.resumeOffer != null &&
@@ -72,7 +73,7 @@ function payloadFor (state) {
     isPaused: playing.isPaused,
     currentTime: playing.currentTime || 0,
     duration: playing.duration || 0,
-    bufferedFraction,
+    bufferedRanges,
     volume: playing.volume,
     playbackRate: playing.playbackRate,
     isFullScreen: state.window.isFullScreen,

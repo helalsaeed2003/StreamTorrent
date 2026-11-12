@@ -143,14 +143,9 @@ module.exports = class TorrentController {
   }
 
   torrentProgress (progressInfo) {
-    // Overall progress across all active torrents, 0 to 1, or -1 to hide the progress bar
-    // Hide progress bar when client has no torrents, or progress is 100%
-    const progress = (!progressInfo.hasActiveTorrents || progressInfo.progress === 1)
-      ? -1
-      : progressInfo.progress
-
-    // Show progress bar under the WebTorrent taskbar icon, on OSX
-    this.state.dock.progress = progress
+    // Nothing is drawn over the taskbar icon. Downloading happens while a
+    // video plays, so a bar there was filling and emptying the whole time
+    // the app was simply being used.
 
     // Update progress for each individual torrent
     progressInfo.torrents.forEach((p) => {

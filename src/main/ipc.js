@@ -298,7 +298,6 @@ function init () {
 
   ipcMain.on('setAspectRatio', (e, ...args) => main.setAspectRatio(...args))
   ipcMain.on('setBounds', (e, ...args) => main.setBounds(...args))
-  ipcMain.on('setProgress', (e, ...args) => main.setProgress(...args))
   ipcMain.on('setTitle', (e, ...args) => main.setTitle(...args))
   ipcMain.on('show', () => main.show())
   ipcMain.on('toggleFullScreen', (e, ...args) => main.toggleFullScreen(...args))

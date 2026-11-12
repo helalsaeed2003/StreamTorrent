@@ -418,6 +418,42 @@ function getTorrentProgress () {
  * torrent of tens of thousands of files from costing a second of work every
  * second.
  */
+// At most this many stretches are reported. A file downloaded in scattered
+// pieces could otherwise have thousands of them, which is more than the bar
+// can draw and more than is worth sending every second.
+const MAX_RANGES = 32
+
+/**
+ * Turns runs of pieces into fractions of the file, and keeps the list short
+ * by closing up the smallest gaps between them first. Closing a gap only ever
+ * claims a little more than is really there, by less than the gap itself.
+ */
+function asFractions (runs, numPieces) {
+  if (runs.length === 0) return []
+
+  const kept = runs.slice()
+
+  while (kept.length > MAX_RANGES) {
+    let smallest = 0
+    let smallestGap = Infinity
+    for (let i = 0; i < kept.length - 1; i++) {
+      const gap = kept[i + 1][0] - kept[i][1]
+      if (gap < smallestGap) {
+        smallestGap = gap
+        smallest = i
+      }
+    }
+    kept[smallest] = [kept[smallest][0], kept[smallest + 1][1]]
+    kept.splice(smallest + 1, 1)
+  }
+
+  // Rounded, so that a bar that has not visibly moved does not count as a
+  // change worth sending
+  const round = (value) => Math.round((value / numPieces) * 1000) / 1000
+
+  return kept.map(([from, to]) => [round(from), round(to)])
+}
+
 function fileProgressFor (torrent) {
   const files = torrent.files
   if (!files) return null
@@ -437,15 +473,31 @@ function fileProgressFor (torrent) {
     const file = files[index]
     const numPieces = file._endPiece - file._startPiece + 1
     let numPiecesPresent = 0
+
+    // Which stretches of the file are here, as fractions of it. A torrent is
+    // not downloaded front to back: after a seek the pieces come down around
+    // the new position, so a single number counted from the start says
+    // nothing about what can be played from where the user is.
+    const runs = []
+    let runStart = -1
+
     for (let piece = file._startPiece; piece <= file._endPiece; piece++) {
-      if (torrent.bitfield.get(piece)) numPiecesPresent++
+      if (torrent.bitfield.get(piece)) {
+        numPiecesPresent++
+        if (runStart < 0) runStart = piece
+      } else if (runStart >= 0) {
+        runs.push([runStart - file._startPiece, piece - file._startPiece])
+        runStart = -1
+      }
     }
+    if (runStart >= 0) runs.push([runStart - file._startPiece, numPieces])
 
     progress[index] = {
       startPiece: file._startPiece,
       endPiece: file._endPiece,
       numPieces,
-      numPiecesPresent
+      numPiecesPresent,
+      ranges: asFractions(runs, numPieces)
     }
   }
 

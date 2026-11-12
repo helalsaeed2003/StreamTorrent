@@ -5,7 +5,6 @@ const main = module.exports = {
   send,
   setAspectRatio,
   setBounds,
-  setProgress,
   setTitle,
   show,
   toggleAlwaysOnTop,
@@ -186,14 +185,6 @@ function setBounds (bounds, maximize) {
   } else {
     log('setBounds: not setting bounds because of window maximization')
   }
-}
-
-/**
- * Set progress bar to [0, 1]. Indeterminate when > 1. Remove with < 0.
- */
-function setProgress (progress) {
-  if (!main.win) return
-  main.win.setProgressBar(progress)
 }
 
 function setTitle (title) {
