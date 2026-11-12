@@ -48,6 +48,23 @@ let dragging = false
 let lastSeek = 0
 const SEEK_EVERY = 90
 
+// Where the handle is drawn while it is held, and for a moment after it is
+// let go. The time the page sends comes from mpv, which only reports the new
+// one once it has finished seeking, so following it during a drag makes the
+// handle stutter and snap back. The pointer says where the handle is instead.
+let held = null
+let heldUntil = 0
+const HOLD_AFTER_DROP = 2000
+
+// How near the reported time has to be to where the handle was dropped,
+// in seconds, before the video is followed again
+const CAUGHT_UP = 1.5
+
+function drawCursor (fraction) {
+  const at = Math.max(0, Math.min(1, fraction || 0))
+  parts.cursor.style.left = 'calc(' + (at * 100) + '% - 3px)'
+}
+
 function seekTo (fraction, now) {
   const duration = shown.duration || 0
   if (!duration) return
@@ -150,9 +167,14 @@ function build () {
   parts.scrub.addEventListener('pointerdown', e => {
     dragging = true
     scrubbing = fractionAt(e.clientX)
+    held = scrubbing
+    drawCursor(held)
     try {
       parts.scrub.setPointerCapture(e.pointerId)
     } catch (err) {}
+    // Hold the video still for as long as the handle is held, or it plays on
+    // under the pointer and the picture jumps between the two
+    act('setScrubbing', true)
     drawPreview()
     seekTo(scrubbing, true)
   })
@@ -160,7 +182,11 @@ function build () {
   parts.scrub.addEventListener('pointermove', e => {
     scrubbing = fractionAt(e.clientX)
     drawPreview()
-    if (dragging) seekTo(scrubbing, false)
+    if (dragging) {
+      held = scrubbing
+      drawCursor(held)
+      seekTo(scrubbing, false)
+    }
   })
 
   const letGo = e => {
@@ -170,7 +196,11 @@ function build () {
       parts.scrub.releasePointerCapture(e.pointerId)
     } catch (err) {}
     // Land exactly where the pointer was let go, whatever the last one skipped
-    seekTo(fractionAt(e.clientX), true)
+    held = fractionAt(e.clientX)
+    heldUntil = Date.now() + HOLD_AFTER_DROP
+    drawCursor(held)
+    seekTo(held, true)
+    act('setScrubbing', false)
   }
 
   parts.scrub.addEventListener('pointerup', letGo)
@@ -316,13 +346,29 @@ function draw (data) {
   }
 
   const fraction = shown.duration > 0 ? shown.currentTime / shown.duration : 0
-  parts.cursor.style.left = 'calc(' + (fraction * 100) + '% - 3px)'
+
+  // The pointer has the handle while it is held. Once it is let go the video
+  // takes a moment to arrive where it was dropped, and the handle waits there
+  // for it rather than springing back to where the video still is.
+  const waiting = held != null && Date.now() < heldUntil && shown.duration > 0 &&
+    Math.abs(shown.currentTime - held * shown.duration) > CAUGHT_UP
+  if (dragging || waiting) {
+    drawCursor(held == null ? fraction : held)
+  } else {
+    held = null
+    drawCursor(fraction)
+  }
+
   drawLoaded(shown.bufferedRanges || [])
 
   // Nothing is under the pointer once the bars are gone
   if (!shown.visible && hovering) hover(false)
 
-  parts.playPause.textContent = shown.isPaused ? 'play_arrow' : 'pause'
+  // The video is held still while the handle is, which is not the user
+  // pausing it, so the button is left alone until the handle is let go
+  if (!dragging) {
+    parts.playPause.textContent = shown.isPaused ? 'play_arrow' : 'pause'
+  }
   parts.previous.className = 'icon skip-previous float-left' +
     (shown.hasPrevious ? '' : ' disabled')
   parts.next.className = 'icon skip-next float-left' +

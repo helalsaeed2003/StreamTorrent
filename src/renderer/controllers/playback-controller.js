@@ -155,6 +155,27 @@ module.exports = class PlaybackController {
     ipcRenderer.send('onPlayerPause')
   }
 
+  // The seek bar handle is being held, or has just been let go. The video is
+  // held still for as long as it is: left playing, it runs on under the
+  // pointer and the picture jumps between where the pointer is and where the
+  // video got to. Only a video this paused is started again afterwards, so
+  // one the user had paused themselves stays paused.
+  setScrubbing (on) {
+    const state = this.state
+    if (state.location.url() !== 'player') return
+
+    if (on) {
+      if (state.playing.isPaused) return
+      this.pausedForScrubbing = true
+      this.pause()
+      return
+    }
+
+    if (!this.pausedForScrubbing) return
+    this.pausedForScrubbing = false
+    this.play()
+  }
+
   // Skip specified number of seconds (backwards if negative)
   skip (time) {
     this.skipTo(this.state.playing.currentTime + time)
@@ -467,6 +488,9 @@ module.exports = class PlaybackController {
 
   closePlayer () {
     console.log('closePlayer')
+
+    // Nothing is left half-dragged behind a player that has gone
+    this.pausedForScrubbing = false
 
     // Quit any external players, like Chromecast/Airplay/etc or VLC
     const state = this.state

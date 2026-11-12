@@ -404,6 +404,7 @@ const dispatchHandlers = {
   previousTrack: () => controllers.playback().previousTrack(),
   skip: (time) => controllers.playback().skip(time),
   skipTo: (time) => controllers.playback().skipTo(time),
+  setScrubbing: (on) => controllers.playback().setScrubbing(on),
   preview: (x) => controllers.playback().preview(x),
   clearPreview: () => controllers.playback().clearPreview(),
   changePlaybackRate: (dir) => controllers.playback().changePlaybackRate(dir),
