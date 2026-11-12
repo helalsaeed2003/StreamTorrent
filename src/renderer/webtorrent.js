@@ -637,6 +637,51 @@ function getAudioMetadata (infoHash, index) {
     )
 }
 
+/**
+ * Says that we want something after all.
+ *
+ * A torrent with nothing selected counts as finished, and a finished
+ * torrent turns away every peer its trackers offer: lib/torrent.js drops a
+ * peer address outright while torrent.done is set. Nothing here is selected
+ * until the user plays or preloads a file, so every torrent starts out
+ * finished, and asking for a file afterwards does not work that out again -
+ * the torrent sits there with nobody to ask and no way to get anybody.
+ *
+ * So it is worked out here, after every change to what is wanted. When that
+ * turns a finished torrent back into an unfinished one the trackers are
+ * asked again straight away, since the peers they offered while it was
+ * finished were thrown away and the next announce can be half an hour off.
+ */
+function wantMore (torrent) {
+  if (!torrent || torrent.destroyed || !torrent.ready) return
+  if (!torrent.done) return
+
+  // Is any of what has been asked for still missing? Worked out here rather
+  // than by the engine's own _checkDone, which counts a torrent with nothing
+  // asked for as finished when it is called on a fresh one and as unfinished
+  // when it is called again - and a torrent nobody has asked anything of
+  // should stay quiet rather than go looking for peers.
+  let missing = false
+  for (const selection of torrent._selections || []) {
+    for (let piece = selection.from; piece <= selection.to; piece++) {
+      if (!torrent.bitfield.get(piece)) {
+        missing = true
+        break
+      }
+    }
+    if (missing) break
+  }
+
+  if (!missing) return
+
+  console.log('torrent %s: asking the trackers again, now that there is ' +
+    'something to fetch', torrent.infoHash)
+  torrent.done = false
+  try {
+    torrent.discovery.tracker.update()
+  } catch (err) {}
+}
+
 function selectFiles (torrentOrInfoHash, selections) {
   // Get the torrent object
   let torrent
@@ -680,6 +725,7 @@ function selectFiles (torrentOrInfoHash, selections) {
   selectedFiles.set(torrent.infoHash, selected)
   console.log('torrent %s: downloading %d of %d files',
     torrent.name, selected.size, torrent.files.length)
+  wantMore(torrent)
 }
 
 /**
@@ -708,6 +754,7 @@ function prioritizePosition (infoHash, index, seconds, duration) {
   torrent.select(startPiece, file._endPiece, 1)
   // ...and treat the next few pieces as urgent, so playback can start
   torrent.critical(startPiece, Math.min(startPiece + 4, file._endPiece))
+  wantMore(torrent)
 }
 
 /**
@@ -735,6 +782,7 @@ function fetchFile (infoHash, index) {
   // Ahead of the video in the queue: it is tiny, and playback is waiting on it
   file.select(5)
   torrent.critical(file._startPiece, file._endPiece)
+  wantMore(torrent)
   file.once('done', announce)
 }
 
