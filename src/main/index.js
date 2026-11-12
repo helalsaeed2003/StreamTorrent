@@ -106,7 +106,7 @@ function init () {
     // cannot.
     setInterval(() => {
       try {
-        windows.main.dispatch('stateSave')
+        windows.main.dispatch('stateSaveIfChanged')
       } catch (err) {}
     }, 60 * 1000)
 

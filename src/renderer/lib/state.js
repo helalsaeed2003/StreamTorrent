@@ -7,6 +7,16 @@ const defaultAnnounceList = require('create-torrent').announceList.map((arr) => 
 
 const SAVE_DEBOUNCE_INTERVAL = 1000
 
+// Whether anything has changed since the last write. The timed saves are
+// there so a crash or a power cut costs at most half a minute of changes;
+// most of the time nothing has happened since the last one, and writing
+// several megabytes again for that is work for nothing.
+let unsaved = true
+
+// Writes go one after another: two at once would be writing the same
+// temporary file over each other
+let writes = Promise.resolve()
+
 appConfig.filePath = path.join(config.CONFIG_PATH, 'config.json')
 
 const State = module.exports = Object.assign(new EventEmitter(), {
@@ -18,7 +28,17 @@ const State = module.exports = Object.assign(new EventEmitter(), {
     const debounce = require('debounce')
     // After first State.save() invokation, future calls go straight to the
     // debounced function
-    State.save = debounce(saveImmediate, SAVE_DEBOUNCE_INTERVAL)
+    const later = debounce(saveImmediate, SAVE_DEBOUNCE_INTERVAL)
+    State.save = (...rest) => {
+      unsaved = true
+      later(...rest)
+    }
+    State.save(...args)
+  },
+  // For the saves that run on a timer rather than because something
+  // happened: nothing to write when nothing has changed
+  saveIfChanged (...args) {
+    if (!unsaved) return
     State.save(...args)
   },
   saveImmediate
@@ -383,6 +403,7 @@ function findPoster (infoHash) {
  */
 function saveImmediate (state, cb) {
   console.log('Saving state to ' + appConfig.filePath)
+  unsaved = false
 
   // Clean up, so that we're not saving any pending state
   const copy = Object.assign({}, state.saved)
@@ -404,22 +425,37 @@ function saveImmediate (state, cb) {
       return torrent
     })
 
+  // Not indented: the torrent list runs to megabytes, and the spaces are a
+  // third of the file, a third of the time spent writing it and a third of
+  // the time spent reading it back at the next start
+  const text = JSON.stringify(copy)
+
+  // The file itself is written away from the page, so the window does not
+  // stop for it, and one write at a time so two never share the temporary
+  // file. Whoever is waiting to quit hears about it either way.
+  writes = writes.then(() => writeOut(text)).then(() => {
+    State.emit('stateSaved')
+    if (cb) cb()
+  })
+}
+
+// Writes the file out beside the old one and moves it over, so a crash or a
+// power cut in the middle leaves the last good copy in place
+async function writeOut (text) {
   const fs = require('fs')
   const file = appConfig.filePath
   const temporary = file + '.writing'
 
   try {
-    fs.mkdirSync(path.dirname(file), { recursive: true })
-    fs.writeFileSync(temporary, JSON.stringify(copy, null, 2))
-    fs.renameSync(temporary, file)
+    await fs.promises.mkdir(path.dirname(file), { recursive: true })
+    await fs.promises.writeFile(temporary, text)
+    await fs.promises.rename(temporary, file)
   } catch (err) {
     console.error('Could not save the state file ' + file, err)
+    // A write that failed has not been saved after all
+    unsaved = true
     try {
-      fs.rmSync(temporary, { force: true })
+      await fs.promises.rm(temporary, { force: true })
     } catch (ignored) {}
   }
-
-  // Said either way: whoever is waiting to quit should not be left hanging
-  State.emit('stateSaved')
-  if (cb) cb()
 }

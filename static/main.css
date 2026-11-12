@@ -488,6 +488,17 @@ body.drag .app::after {
   white-space: nowrap;
   border: none;
   border-spacing: 0;
+
+  /* Every column but the name has a width of its own, so the table need not
+     look through the rows to lay itself out. It also keeps the columns from
+     shifting as rows are drawn and dropped on the way past. */
+  table-layout: fixed;
+}
+
+/* Stands in for the rows that are not drawn: empty, and as tall as they
+   would have been */
+.torrent-details tr.row-spacer {
+  background: none;
 }
 
 .torrent-details tr {

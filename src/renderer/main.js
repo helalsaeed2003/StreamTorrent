@@ -157,7 +157,7 @@ function onState (err, _state) {
   // The torrent list and where each video was left off are written out every
   // half minute. Waiting for the app to quit is not enough: an update, which
   // closes the app from outside, a crash or a power cut would take the lot.
-  setInterval(() => dispatch('stateSave'), 30 * 1000)
+  setInterval(() => dispatch('stateSaveIfChanged'), 30 * 1000)
 
   // Listen for messages from the main process
   setupIpc()
@@ -503,6 +503,7 @@ const dispatchHandlers = {
   checkForUpdates: () =>
     ipcRenderer.send('checkForUpdates', state.saved.prefs.updateFolder),
   stateSave: () => State.save(state),
+  stateSaveIfChanged: () => State.saveIfChanged(state),
   stateSaveImmediate: () => {
     // Quitting mid-video still records where we got to
     if (state.location.url() === 'player') controllers.playback().savePosition()

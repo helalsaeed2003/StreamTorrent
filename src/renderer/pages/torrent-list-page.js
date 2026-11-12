@@ -11,6 +11,18 @@ const PlaybackPosition = require('../lib/playback-position')
 const { dispatch, dispatcher } = require('../lib/dispatcher')
 const { calculateEta, formatPosition } = require('../lib/time')
 
+// Every row of an open torrent is this tall, set in main.css. Knowing it
+// means the rows that are not on screen do not have to exist to take up
+// their share of the scrollbar.
+const ROW_HEIGHT = 28
+
+// Rows kept drawn above and below the part on screen, so a flick of the
+// wheel has something to show before the next frame catches up
+const OVERSCAN = 12
+
+// How many rows to draw before the list has been measured
+const ROWS_BEFORE_MEASURING = 60
+
 module.exports = class TorrentList extends React.Component {
   // The list scrolls inside .content, which is owned by the app shell. Watch it
   // so we always know where the user was, and put them back there when they
@@ -21,6 +33,8 @@ module.exports = class TorrentList extends React.Component {
 
     this.handleScroll = () => {
       this.props.state.listScrollTop = this.scrollElem.scrollTop
+      // Scrolling brings rows into view that are not drawn yet
+      if (this.rowCount > 0) this.redrawSoon()
     }
     this.scrollElem.addEventListener('scroll', this.handleScroll)
 
@@ -38,6 +52,53 @@ module.exports = class TorrentList extends React.Component {
       this.scrollElem.removeEventListener('scroll', this.handleScroll)
     }
     this.scrollElem = null
+    this.listBody = null
+  }
+
+  // Where the file list starts can only be known once it has been laid out,
+  // and it moves as the torrents above it are opened and closed
+  componentDidUpdate () {
+    if (!this.listBody || !this.rowCount) return
+    this.measureList()
+    const want = this.visibleRange(this.rowCount)
+    const drawn = this.drawnRange
+    if (!drawn || want.first !== drawn.first || want.last !== drawn.last) {
+      this.redrawSoon()
+    }
+  }
+
+  // One redraw per frame at most, however many scroll events arrive
+  redrawSoon () {
+    if (this.redrawQueued) return
+    this.redrawQueued = true
+    window.requestAnimationFrame(() => {
+      this.redrawQueued = false
+      dispatch('update')
+    })
+  }
+
+  // How far down the scrolling area the first row sits
+  measureList () {
+    const elem = this.scrollElem
+    const body = this.listBody
+    if (!elem || !body) return
+    this.listTop = body.getBoundingClientRect().top -
+      elem.getBoundingClientRect().top + elem.scrollTop
+  }
+
+  // Which rows are on screen. A torrent of tens of thousands of files would
+  // otherwise be a hundred thousand elements for the page to walk every time
+  // anything at all changes, which took a third of a second a go.
+  visibleRange (count) {
+    const elem = this.scrollElem
+    if (!elem || count <= 0) {
+      return { first: 0, last: Math.min(count, ROWS_BEFORE_MEASURING) }
+    }
+
+    const above = elem.scrollTop - (this.listTop || 0)
+    const first = Math.max(0, Math.floor(above / ROW_HEIGHT) - OVERSCAN)
+    const fits = Math.ceil(elem.clientHeight / ROW_HEIGHT) + OVERSCAN * 2
+    return { first, last: Math.min(count, first + fits) }
   }
 
   render () {
@@ -410,15 +471,31 @@ module.exports = class TorrentList extends React.Component {
       // folders they are in; otherwise the files are laid out as a tree
       const query = state.find.active ? state.find.query.trim() : ''
       const rows = query
-        ? this.renderSearchRows(torrentSummary, query)
-        : this.renderTreeRows(torrentSummary, FileTree.getTree(
+        ? this.collectSearchRows(torrentSummary, query)
+        : this.collectTreeRows(torrentSummary, FileTree.getTree(
           torrentSummary, state.saved.prefs.sortByName), 0, [])
+
+      this.rowCount = rows.length
+      const range = this.visibleRange(rows.length)
+      this.drawnRange = range
+
+      // The rows above and below the ones drawn stand in as two empty rows
+      // of the height they would have taken, so the scrollbar is the right
+      // size and in the right place
+      const drawn = []
+      if (range.first > 0) drawn.push(spacerRow('top', range.first))
+      for (let i = range.first; i < range.last; i++) {
+        drawn.push(this.renderRow(torrentSummary, rows[i]))
+      }
+      if (range.last < rows.length) {
+        drawn.push(spacerRow('bottom', rows.length - range.last))
+      }
 
       filesElement = (
         <div key='files' className='files'>
           <table>
-            <tbody>
-              {rows}
+            <tbody ref={(elem) => { this.listBody = elem }}>
+              {drawn}
             </tbody>
           </table>
         </div>
@@ -442,7 +519,7 @@ module.exports = class TorrentList extends React.Component {
     if (!state.find.active) return null
 
     const query = state.find.query.trim()
-    const matches = query ? matchingFiles(torrentSummary, query).length : null
+    const matches = query ? this.matchesFor(torrentSummary, query).length : null
 
     return (
       // Clicks and right-clicks belong to the box, not to the torrent row
@@ -538,12 +615,39 @@ module.exports = class TorrentList extends React.Component {
     )
   }
 
-  // The rows shown while searching: every file that matches, wherever it is
-  renderSearchRows (torrentSummary, query) {
-    const matches = matchingFiles(torrentSummary, query)
+  // What searching would show: every file that matches, wherever it is.
+  // Described rather than drawn, so only the part on screen costs anything
+  // to put together.
+  collectSearchRows (torrentSummary, query) {
+    const matches = this.matchesFor(torrentSummary, query)
+    if (matches.length === 0) return [{ empty: true }]
+    return matches.map(({ file, index }) => ({ file, index, depth: 0 }))
+  }
 
-    if (matches.length === 0) {
-      return [(
+  // Walks the folder tree and collects the rows that are currently visible:
+  // a folder's contents only show up once that folder has been opened
+  collectTreeRows (torrentSummary, node, depth, rows) {
+    const state = this.props.state
+    const infoHash = torrentSummary.infoHash
+
+    const expanded = state.folderExpanded || {}
+    node.folders.forEach((folder) => {
+      const isExpanded = !!expanded[FileTree.getFolderKey(infoHash, folder.key)]
+      rows.push({ folder, depth, isExpanded })
+      if (isExpanded) this.collectTreeRows(torrentSummary, folder, depth + 1, rows)
+    })
+
+    node.files.forEach((entry) => {
+      rows.push({ file: entry.file, index: entry.index, depth })
+    })
+
+    return rows
+  }
+
+  // Turns one of those descriptions into the row it stands for
+  renderRow (torrentSummary, row) {
+    if (row.empty) {
+      return (
         <tr key='no-matches' className='file-row disabled'>
           <td className='col-icon' />
           <td className='col-name'>Nothing in this torrent matches</td>
@@ -552,31 +656,24 @@ module.exports = class TorrentList extends React.Component {
           <td className='col-preload' />
           <td className='col-select' />
         </tr>
-      )]
+      )
     }
-
-    return matches.map(({ file, index }) =>
-      this.renderFileRow(torrentSummary, file, index, 0))
+    if (row.folder) {
+      return this.renderFolderRow(torrentSummary, row.folder, row.depth,
+        row.isExpanded)
+    }
+    return this.renderFileRow(torrentSummary, row.file, row.index, row.depth)
   }
 
-  // Walks the folder tree and collects the rows that are currently visible:
-  // a folder's contents only show up once that folder has been opened
-  renderTreeRows (torrentSummary, node, depth, rows) {
-    const state = this.props.state
-    const infoHash = torrentSummary.infoHash
-
-    const expanded = state.folderExpanded || {}
-    node.folders.forEach((folder) => {
-      const isExpanded = !!expanded[FileTree.getFolderKey(infoHash, folder.key)]
-      rows.push(this.renderFolderRow(torrentSummary, folder, depth, isExpanded))
-      if (isExpanded) this.renderTreeRows(torrentSummary, folder, depth + 1, rows)
-    })
-
-    node.files.forEach((entry) => {
-      rows.push(this.renderFileRow(torrentSummary, entry.file, entry.index, depth))
-    })
-
-    return rows
+  // Looking through every file of a torrent is not something to do twice in
+  // one draw: the find bar wants the number and the list wants the files
+  matchesFor (torrentSummary, query) {
+    const key = torrentSummary.infoHash + '|' + query + '|' +
+      (torrentSummary.files || []).length
+    if (this.matches && this.matches.key === key) return this.matches.found
+    const found = matchingFiles(torrentSummary, query)
+    this.matches = { key, found }
+    return found
   }
 
   // A collapsible folder, like a row in a file explorer. Collapsed by default.
@@ -887,6 +984,20 @@ function getErrorMessage (torrentSummary) {
  * Every word has to appear somewhere in the file's path, so "pmv aard" finds
  * "Aardstyle/In Our Heads PMV.mp4" however the words are ordered.
  */
+// Stands in for the rows that are not drawn, so the list is as tall as it
+// would be if they all were
+function spacerRow (where, count) {
+  return (
+    <tr
+      key={'spacer-' + where}
+      className='row-spacer'
+      style={{ height: count * ROW_HEIGHT }}
+    >
+      <td colSpan='6' />
+    </tr>
+  )
+}
+
 function matchingFiles (torrentSummary, query) {
   return FileSearch.matchingFiles(torrentSummary, query)
 }
