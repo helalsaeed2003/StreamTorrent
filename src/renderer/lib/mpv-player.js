@@ -99,7 +99,16 @@ function onProperty (name, value) {
       return
 
     case 'duration':
-      if (typeof value === 'number' && value > 0) p.duration = value
+      // While mpv is still working out what it has of a file - one only
+      // part of which has been downloaded - it can report a length of a
+      // few seconds. Taking that would leave the position past the end of
+      // the video, which counts as having watched it to the end: the file
+      // is marked finished and where the user had got to is thrown away.
+      // A length the position is already past is not a length.
+      if (typeof value === 'number' && value > 0 &&
+        value + END_OF_VIDEO_SECONDS >= (p.currentTime || 0)) {
+        p.duration = value
+      }
       break
 
     case 'pause':
@@ -293,6 +302,15 @@ function close () {
 }
 
 function load (url, options) {
+  // The length and the position on record belong to whatever was playing
+  // before this. Clearing them keeps the old numbers from being written
+  // down against the new file, and from being compared with a length mpv
+  // has yet to report.
+  const p = playing()
+  if (p) {
+    p.duration = 0
+    p.currentTime = 0
+  }
   ipcRenderer.send('mpv-load', url, options || {})
 }
 

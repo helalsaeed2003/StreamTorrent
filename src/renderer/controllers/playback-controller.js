@@ -593,6 +593,11 @@ module.exports = class PlaybackController {
     const fileSummary = state.getPlayingFileSummary()
     if (!fileSummary) return
 
+    // Nothing is known yet about a video that has not loaded. Writing down
+    // the numbers standing in for it would throw away the position this
+    // very video was opened to be resumed from.
+    if (usesMpv(state) && !state.playing.mpvLoaded) return
+
     const justFinished = PlaybackPosition.recordPosition(
       fileSummary, state.playing.currentTime, state.playing.duration)
 

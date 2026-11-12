@@ -74,7 +74,14 @@ function getResumeTime (file) {
 function recordPosition (file, currentTime, duration) {
   if (!file) return false
 
-  if (typeof duration === 'number' && isFinite(duration) && duration > 0) {
+  // A length the position is already past is not a length: the player can
+  // report a few seconds for a file it has only part of, and writing that
+  // down would make the video look watched to the end
+  const past = typeof currentTime === 'number' && isFinite(currentTime)
+    ? currentTime
+    : 0
+  if (typeof duration === 'number' && isFinite(duration) && duration > 0 &&
+    duration >= past) {
     file.duration = duration
   }
   if (typeof currentTime === 'number' && isFinite(currentTime) && currentTime >= 0) {
