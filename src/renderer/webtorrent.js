@@ -398,7 +398,6 @@ function getTorrentProgress () {
       uploadSpeed: torrent.uploadSpeed,
       numPeers: torrent.numPeers,
       length: torrent.length,
-      bitfield: torrent.bitfield,
       files: fileProg
     }
   })
@@ -493,8 +492,6 @@ function fileProgressFor (torrent) {
     if (runStart >= 0) runs.push([runStart - file._startPiece, numPieces])
 
     progress[index] = {
-      startPiece: file._startPiece,
-      endPiece: file._endPiece,
       numPieces,
       numPiecesPresent,
       ranges: asFractions(runs, numPieces)

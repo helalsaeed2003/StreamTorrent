@@ -1,7 +1,6 @@
 /* globals MediaMetadata */
 
 const React = require('react')
-const BitField = require('bitfield').default
 const prettyBytes = require('prettier-bytes')
 
 const TorrentSummary = require('../lib/torrent-summary')
@@ -1101,8 +1100,13 @@ function renderPreview (state) {
   )
 }
 
-// Renders the loading bar. Shows which parts of the torrent are loaded, which
-// can be 'spongey' / non-contiguous
+// Renders the loading bar. Shows which parts of the file are here, which
+// can be 'spongey' / non-contiguous: a torrent does not arrive front to back.
+//
+// The stretches are worked out once, where the torrent is, and come down
+// with the rest of the progress as fractions of the file. They used to be
+// counted here instead, which meant the whole torrent's bitfield had to be
+// sent over every second for a bar only audio and casting still draw.
 function renderLoadingBar (state) {
   if (config.IS_TEST) return // Don't integration test the loading bar. Screenshots won't match.
 
@@ -1111,29 +1115,13 @@ function renderLoadingBar (state) {
     return null
   }
 
-  // Find all contiguous parts of the torrent which are loaded
-  const prog = torrentSummary.progress
-  const fileProg = prog.files[state.playing.fileIndex]
+  const fileProg = torrentSummary.progress.files[state.playing.fileIndex]
+  if (!fileProg || !fileProg.ranges) return null
 
-  if (!fileProg) return null
-
-  const parts = []
-  let lastPiecePresent = false
-  for (let i = fileProg.startPiece; i <= fileProg.endPiece; i++) {
-    const partPresent = BitField.prototype.get.call(prog.bitfield, i)
-    if (partPresent && !lastPiecePresent) {
-      parts.push({ start: i - fileProg.startPiece, count: 1 })
-    } else if (partPresent) {
-      parts[parts.length - 1].count++
-    }
-    lastPiecePresent = partPresent
-  }
-
-  // Output some bars to show which parts of the file are loaded
-  const loadingBarElems = parts.map((part, i) => {
+  const loadingBarElems = fileProg.ranges.map(([from, to], i) => {
     const style = {
-      left: (100 * part.start / fileProg.numPieces) + '%',
-      width: (100 * part.count / fileProg.numPieces) + '%'
+      left: (100 * from) + '%',
+      width: (100 * (to - from)) + '%'
     }
 
     return (<div key={i} className='loading-bar-part' style={style} />)

@@ -96,8 +96,15 @@ module.exports = class TorrentList extends React.Component {
     }
 
     const above = elem.scrollTop - (this.listTop || 0)
-    const first = Math.max(0, Math.floor(above / ROW_HEIGHT) - OVERSCAN)
     const fits = Math.ceil(elem.clientHeight / ROW_HEIGHT) + OVERSCAN * 2
+
+    // Never past the point where the last rows still fill the window. The
+    // list gets shorter when folders are shut, and the page is scrolled back
+    // up a moment later: without this it would be blank until then.
+    const first = Math.min(
+      Math.max(0, Math.floor(above / ROW_HEIGHT) - OVERSCAN),
+      Math.max(0, count - fits)
+    )
     return { first, last: Math.min(count, first + fits) }
   }
 

@@ -514,8 +514,10 @@ const dispatchHandlers = {
 
 // Events from the UI never modify state directly. Instead they call dispatch()
 function dispatch (action, ...args) {
-  // Log dispatch calls, for debugging, but don't spam
-  if (!['mediaMouseMoved', 'mediaTimeUpdate', 'update'].includes(action)) {
+  // Log dispatch calls while working on the app, but don't spam. The built
+  // app has no console to read them in, and there are a lot of them.
+  if (!config.IS_PRODUCTION &&
+    !['mediaMouseMoved', 'mediaTimeUpdate', 'update'].includes(action)) {
     console.log('dispatch: %s %o', action, args)
   }
 
