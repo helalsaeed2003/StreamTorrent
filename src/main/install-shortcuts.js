@@ -246,12 +246,12 @@ function apply (choice, win) {
       !!choice.fileHandler)
   }
 
-  // Registering is not enough once another program has been chosen for
-  // torrent files or magnet links: Windows keeps using that choice until it
-  // is cleared. Anything that cannot be cleared is left to Windows' own
-  // screen rather than quietly doing nothing.
+  // Registering is not enough: Windows keeps the choice the user last made
+  // and that choice wins, so it has to be written too. Anything that cannot
+  // be written is left to Windows' own screen rather than quietly doing
+  // nothing.
   if (choice.fileHandler) {
-    const left = handlers.clearChosenHandlersWin32(handlers.ASSOCIATIONS)
+    const left = handlers.takeAssociationsWin32()
     log('still chosen elsewhere: ' + (left.join(', ') || 'nothing'))
     if (left.length > 0) setTimeout(() => handlers.openDefaultAppsSettings(), 400)
   }

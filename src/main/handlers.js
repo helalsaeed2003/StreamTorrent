@@ -1,11 +1,17 @@
-// Everything the app asks to open: the file type and the two link protocols
-const ASSOCIATIONS = ['.torrent', 'magnet', 'stream-magnet']
+// Everything the app asks to open, and the name each is registered under.
+// Windows wants the choice made against a ProgId, not against the protocol
+// itself, which is how every other program registers one.
+const ASSOCIATIONS = [
+  { what: '.torrent', progId: 'com.streamtorrent.torrent' },
+  { what: 'magnet', progId: 'com.streamtorrent.magnet' },
+  { what: 'stream-magnet', progId: 'com.streamtorrent.stream-magnet' }
+]
 
 module.exports = {
   install,
   uninstall,
   isOverriddenWin32,
-  clearChosenHandlersWin32,
+  takeAssociationsWin32,
   openDefaultAppsSettings,
   ASSOCIATIONS
 }
@@ -72,6 +78,22 @@ function installWin32 () {
   )
   registerProtocolHandlerWin32(
     'stream-magnet',
+    'URL:BitTorrent Stream-Magnet URL',
+    iconPath,
+    EXEC_COMMAND
+  )
+
+  // The same two under names of our own. Windows records which program opens
+  // a link by its ProgId, so a protocol needs one as well as the protocol key
+  // itself, the way every other program registers one.
+  registerProtocolHandlerWin32(
+    progIdFor('magnet'),
+    'URL:BitTorrent Magnet URL',
+    iconPath,
+    EXEC_COMMAND
+  )
+  registerProtocolHandlerWin32(
+    progIdFor('stream-magnet'),
     'URL:BitTorrent Stream-Magnet URL',
     iconPath,
     EXEC_COMMAND
@@ -255,7 +277,7 @@ function installWin32 () {
       hive: Registry.HKCU,
       key: CAPABILITY_KEY + '\\URLAssociations'
     })
-    urls.set('magnet', Registry.REG_SZ, 'magnet', (err) => {
+    urls.set('magnet', Registry.REG_SZ, progIdFor('magnet'), (err) => {
       if (err) log.error(err.message)
     })
 
@@ -271,26 +293,15 @@ function installWin32 () {
 }
 
 /**
- * Whether Windows has already been told, by the user, which program opens this
- * extension. That choice overrides anything a program registers for itself,
- * and only the user can change it.
- */
-/**
- * Where Windows keeps the choice the user made in the "Open with" dialog, for
- * a file extension and for a link protocol. These win over anything a program
- * registers for itself, which is the whole point of them.
+ * Where Windows keeps the choice of which program opens something, for a
+ * file extension and for a link protocol.
  */
 function userChoiceKeyWin32 (what) {
-  if (what.startsWith('.')) {
-    return 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\' +
-      'FileExts\\' + what + '\\UserChoice'
-  }
-  return 'HKCU\\Software\\Microsoft\\Windows\\Shell\\Associations\\' +
-    'UrlAssociations\\' + what + '\\UserChoice'
+  return 'HKCU\\' + require('./user-choice').keyPathFor(what)
 }
 
-// What Windows currently opens this extension or protocol with, as a ProgId,
-// or null when nothing has been chosen and our own registration stands
+// What Windows opens this extension or protocol with, as a ProgId, or null
+// when nothing has been chosen
 function chosenHandlerWin32 (what) {
   if (process.platform !== 'win32') return null
 
@@ -306,99 +317,37 @@ function chosenHandlerWin32 (what) {
   }
 }
 
+// The name this extension or protocol is registered under
+function progIdFor (what) {
+  const entry = ASSOCIATIONS.find(a => a.what === what)
+  return entry ? entry.progId : PROG_ID
+}
+
 /**
  * Whether something other than us has been chosen to open this.
  */
 function isOverriddenWin32 (what) {
   const chosen = chosenHandlerWin32(what)
-  return !!chosen && chosen !== PROG_ID && chosen !== 'magnet' &&
-    chosen !== 'stream-magnet'
+  return !!chosen && chosen !== progIdFor(what)
 }
 
 /**
- * Clears the choice, so that what we registered is used again.
+ * Makes the app what Windows opens torrents and magnet links with.
  *
- * Windows will not let a program name itself in that key. The ProgId there is
- * signed by a hash only Explorer can work out, and the key carries an entry
- * denying the user themselves the right to write values into it. That is why
- * ticking the box used to appear to do nothing: everything was registered
- * correctly and then quietly ignored.
+ * Registering under Software\Classes is not enough on its own: Windows keeps
+ * the choice the user last made in a key of its own, and that choice wins.
+ * See user-choice.js for what is in that key and why it can be written.
  *
- * The key can be cleared, though. The deny only covers writing values, while
- * the user still owns the key, so the deny can be taken off and the key then
- * removed. With nothing chosen, Windows falls back to the handler registered
- * under Software\Classes, which is ours. The user can choose something else
- * again whenever they like, in the Open with dialog or in Settings.
- *
- * Only ever called when the user asks for it.
- *
- * Returns the ones it could not clear.
+ * Only ever called when the user asks for it. Returns the ones it could not
+ * take, so the caller can fall back to asking Windows.
  */
-function clearChosenHandlersWin32 (things) {
-  if (process.platform !== 'win32') return things.slice()
+function takeAssociationsWin32 () {
+  if (process.platform !== 'win32') return ASSOCIATIONS.map(a => a.what)
 
-  const log = require('./log')
+  const taken = require('./user-choice').take(ASSOCIATIONS)
+  require('./log')('could not take: ' + (taken.join(', ') || 'nothing'))
 
-  const wanted = things.filter(what => chosenHandlerWin32(what))
-  if (wanted.length === 0) return []
-
-  // Node cannot change who may write to a registry key, so this one part is
-  // done by Windows itself. Explorer is told afterwards, in the same run,
-  // because it goes on using what it had cached otherwise.
-  const paths = wanted
-    .map(what => userChoiceKeyWin32(what).replace(/^HKCU\\/, ''))
-    .map(path => "'" + path.replace(/'/g, "''") + "'")
-
-  const script = [
-    '$ErrorActionPreference = ' + "'SilentlyContinue'",
-    '$paths = @(' + paths.join(',') + ')',
-    'foreach ($p in $paths) {',
-    '  try {',
-    '    $k = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($p,',
-    '      [Microsoft.Win32.RegistryKeyPermissionCheck]::ReadWriteSubTree,',
-    '      [System.Security.AccessControl.RegistryRights]::ChangePermissions)',
-    '    if ($k) {',
-    '      $acl = $k.GetAccessControl()',
-    '      foreach ($r in @($acl.Access | Where-Object {',
-    "        $_.AccessControlType -eq 'Deny' })) {",
-    '        $acl.RemoveAccessRuleSpecific($r) | Out-Null',
-    '      }',
-    '      $k.SetAccessControl($acl)',
-    '      $k.Close()',
-    '    }',
-    '  } catch {}',
-    '  try {',
-    '    $parent = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey(',
-    '      (Split-Path $p -Parent), $true)',
-    '    if ($parent) {',
-    '      $parent.DeleteSubKeyTree((Split-Path $p -Leaf), $false)',
-    '      $parent.Close()',
-    '    }',
-    '  } catch {}',
-    '}',
-    // SHCNE_ASSOCCHANGED, SHCNF_IDLIST
-    'Add-Type -Namespace StreamTorrent -Name Shell -MemberDefinition ' +
-      '\'[DllImport("shell32.dll")] public static extern void ' +
-      'SHChangeNotify(int eventId, uint flags, IntPtr a, IntPtr b);\'',
-    '[StreamTorrent.Shell]::SHChangeNotify(0x08000000, 0, ' +
-      '[IntPtr]::Zero, [IntPtr]::Zero)'
-  ].join('\n')
-
-  try {
-    require('child_process').execFileSync(
-      'powershell.exe',
-      ['-NoProfile', '-NonInteractive', '-Command', script],
-      { windowsHide: true, stdio: 'ignore', timeout: 30000 }
-    )
-  } catch (err) {
-    log.error('could not clear what opens torrents: ' + err.message)
-  }
-
-  // Trust what is in the registry now, not what the script said
-  const left = wanted.filter(what => chosenHandlerWin32(what))
-  log('cleared: ' + (wanted.filter(w => !left.includes(w)).join(', ') || 'nothing'))
-
-  return left
+  return taken
 }
 
 // Windows' own screen for choosing which program opens what
@@ -411,8 +360,18 @@ function openDefaultAppsSettings () {
 function uninstallWin32 () {
   const Registry = require('winreg')
 
+  // Hand back what Windows records as ours before the registrations go, or
+  // the choice would point at a program that no longer claims anything
+  try {
+    require('./user-choice').release(ASSOCIATIONS)
+  } catch (err) {
+    require('./log').error('could not hand the associations back: ' + err.message)
+  }
+
   unregisterProtocolHandlerWin32('magnet', EXEC_COMMAND)
   unregisterProtocolHandlerWin32('stream-magnet', EXEC_COMMAND)
+  unregisterProtocolHandlerWin32(progIdFor('magnet'), EXEC_COMMAND)
+  unregisterProtocolHandlerWin32(progIdFor('stream-magnet'), EXEC_COMMAND)
   unregisterFileHandlerWin32('.torrent', PROG_ID, EXEC_COMMAND)
   forgetCapabilitiesWin32()
 
