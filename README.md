@@ -183,6 +183,11 @@ own video tag, the folder tree and search, preloading, the resume behaviour, the
 player chrome drawn in separate windows, and the Windows installer and
 auto-update setup.
 
+## Releasing a new version
+
+See [RELEASING.md](RELEASING.md) — change the version, write the changelog
+entry, push a tag, and GitHub builds and publishes it.
+
 ## Licences
 
 StreamTorrent is MIT. mpv and FFmpeg ship inside it and are free software under
