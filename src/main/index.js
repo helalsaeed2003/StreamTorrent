@@ -220,8 +220,9 @@ function delayedInit (state) {
 
   dock.init()
 
-  // No auto-updater, and no announcement check: StreamTorrent never phones
-  // home, and must never replace itself with a different build.
+  // Looks at this project's own GitHub releases for a newer version, and
+  // nothing else: no telemetry, no announcement check, no other address.
+  require('./updater').init()
 
   ipc.setModule('folderWatcher', folderWatcher)
   if (folderWatcher.isEnabled()) {

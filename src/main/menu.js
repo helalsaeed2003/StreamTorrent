@@ -299,10 +299,9 @@ function getMenuTemplate () {
     {
       label: 'Help',
       role: 'help',
-      // No links out to any website: this build does not point anywhere online
       submenu: [
         {
-          label: 'Check for a New Build...',
+          label: 'Check for Updates...',
           click: () => windows.main.dispatch('checkForUpdates')
         },
         {

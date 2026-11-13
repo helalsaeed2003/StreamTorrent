@@ -112,10 +112,7 @@ function onState (err, _state) {
       return new TorrentController(state)
     }),
     torrentList: createGetter(() => new TorrentListController(state)),
-    update: createGetter(() => {
-      const UpdateController = require('./controllers/update-controller')
-      return new UpdateController(state)
-    }),
+
     folderWatcher: createGetter(() => {
       const FolderWatcherController = require('./controllers/folder-watcher-controller')
       return new FolderWatcherController()
@@ -479,10 +476,6 @@ const dispatchHandlers = {
   startFolderWatcher: () => controllers.folderWatcher().start(),
   stopFolderWatcher: () => controllers.folderWatcher().stop(),
 
-  // Update (check for new versions on Linux, where there's no auto updater)
-  updateAvailable: (version) => controllers.update().updateAvailable(version),
-  skipVersion: (version) => controllers.update().skipVersion(version),
-
   // Navigation between screens (back, ESC, etc). There is no forward: the
   // only way back is out of a video or out of Preferences.
   exitModal: () => { state.modal = null },
@@ -501,8 +494,7 @@ const dispatchHandlers = {
   onOpen,
   error: onError,
   uncaughtError: (proc, err) => telemetry.logUncaughtError(proc, err),
-  checkForUpdates: () =>
-    ipcRenderer.send('checkForUpdates', state.saved.prefs.updateFolder),
+  checkForUpdates: () => ipcRenderer.send('checkForUpdates'),
   stateSave: () => State.save(state),
   stateSaveIfChanged: () => State.saveIfChanged(state),
   stateSaveImmediate: () => {

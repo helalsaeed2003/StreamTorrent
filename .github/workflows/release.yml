@@ -1,0 +1,115 @@
+# Builds and publishes a release when a version tag is pushed.
+#
+#   git tag v1.0.1
+#   git push origin v1.0.1
+#
+# That is all it takes. This builds the installer and the portable zip on
+# GitHub's own Windows machine and puts them on a Release, together with the
+# latest.yml and .blockmap that installed copies use to find and fetch the
+# update. The release notes come from CHANGELOG.md.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  # ...and a button on the Actions tab, for a tag that was already pushed
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build, for example v1.0.1'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out the tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Work out the version
+        id: version
+        shell: bash
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building $TAG (version $VERSION)"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Check the tag matches package.json
+        shell: bash
+        run: |
+          PKG=$(node -p "require('./package.json').version")
+          if [ "$PKG" != "${{ steps.version.outputs.version }}" ]; then
+            echo "The tag says ${{ steps.version.outputs.version }} but package.json says $PKG."
+            echo "Set the version in package.json and commit it before tagging."
+            exit 1
+          fi
+          echo "Both say $PKG"
+
+      - name: Lint
+        run: npm test
+
+      - name: Fetch mpv
+        run: npm run fetch-mpv
+
+      - name: Build the installer
+        run: npm run dist
+        env:
+          # Stops electron-builder publishing by itself; the release is made
+          # in one go further down, with the portable zip and the notes
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build the portable zip
+        run: npm run dist:portable
+
+      - name: Release notes from CHANGELOG.md
+        shell: bash
+        run: node bin/changelog-for.js "${{ steps.version.outputs.version }}" > release-notes.md
+
+      - name: Check everything the updater needs is there
+        shell: bash
+        run: |
+          missing=0
+          for f in dist/StreamTorrentSetup.exe dist/latest.yml; do
+            if [ ! -f "$f" ]; then echo "missing: $f"; missing=1; fi
+          done
+          if ! ls dist/*.blockmap >/dev/null 2>&1; then
+            echo "missing: a .blockmap"; missing=1
+          fi
+          if ! ls dist/StreamTorrent-v*-win.zip >/dev/null 2>&1; then
+            echo "missing: the portable zip"; missing=1
+          fi
+          [ "$missing" = "0" ] || exit 1
+          ls -la dist/
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: StreamTorrent ${{ steps.version.outputs.version }}
+          body_path: release-notes.md
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: true
+          files: |
+            dist/StreamTorrentSetup.exe
+            dist/StreamTorrentSetup.exe.blockmap
+            dist/latest.yml
+            dist/StreamTorrent-v*-win.zip

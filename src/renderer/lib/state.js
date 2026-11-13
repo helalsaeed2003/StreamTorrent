@@ -296,9 +296,9 @@ async function load (cb) {
     delete saved.folderExpanded
     if (!saved.prefs) saved.prefs = {}
     if (typeof saved.prefs.tempPath !== 'string') saved.prefs.tempPath = ''
-    if (typeof saved.prefs.updateFolder !== 'string') {
-      saved.prefs.updateFolder = config.DEFAULT_UPDATE_FOLDER
-    }
+    // Updates come from the project's own releases now, not a folder on
+    // this machine, so the setting that pointed at one is dropped
+    delete saved.prefs.updateFolder
     if (!Array.isArray(saved.torrents)) saved.torrents = []
     if (!Array.isArray(saved.staleTempPaths)) saved.staleTempPaths = []
 

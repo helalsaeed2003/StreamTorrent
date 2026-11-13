@@ -56,12 +56,6 @@ module.exports = {
 
   DEFAULT_DOWNLOAD_PATH: getDefaultDownloadPath(),
 
-  // Where Help > Check for a New Build looks. Nothing is set by default:
-  // the folder is wherever this copy of the app was built, which is not the
-  // same place on every machine, so it is left to the user to point at it in
-  // Preferences. Leaving it empty only means the app never updates itself.
-  DEFAULT_UPDATE_FOLDER: '',
-
   IS_PORTABLE,
   IS_PRODUCTION,
   IS_TEST,

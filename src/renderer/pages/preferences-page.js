@@ -316,31 +316,6 @@ class PreferencesPage extends React.Component {
     )
   }
 
-  // Where new builds are kept: the folder holding RELEASES and the .nupkg
-  // files that bin/package.js writes
-  updateFolderSelector () {
-    const updateFolder = this.props.state.saved.prefs.updateFolder || ''
-
-    return (
-      <Preference>
-        <PathSelector
-          dialog={{
-            title: 'Choose the folder new builds are kept in',
-            properties: ['openDirectory']
-          }}
-          onChange={(filePath) => dispatch('updatePreferences', 'updateFolder', filePath)}
-          title='Folder to check for new builds'
-          value={updateFolder}
-        />
-        <p>
-          Optional. Help &gt; Check for a New Build looks here for a newer
-          build of {config.APP_NAME} and swaps it in, keeping your torrents and
-          settings. Leave it empty and nothing is checked.
-        </p>
-      </Preference>
-    )
-  }
-
   render () {
     const style = {
       color: colors.grey400,
@@ -364,7 +339,6 @@ class PreferencesPage extends React.Component {
           {this.setDefaultAppButton()}
         </PreferencesSection>
         <PreferencesSection title='General'>
-          {this.updateFolderSelector()}
           {this.setStartupCheckbox()}
           {this.soundNotificationsCheckbox()}
         </PreferencesSection>

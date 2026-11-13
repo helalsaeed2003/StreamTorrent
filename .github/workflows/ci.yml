@@ -1,21 +1,50 @@
+# Checks every push and pull request: the code lints and compiles, and the
+# installer can still be built. It does not publish anything - that is
+# release.yml, which runs when a version tag is pushed.
+
 name: ci
-on: [push,pull_request]
+
+on:
+  push:
+    branches:
+      - master
+      - main
+  pull_request:
+
 jobs:
-  test:
-    name: Node ${{ matrix.node }} / ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-latest
-        node:
-          - '16'
+  build:
+    runs-on: windows-latest
+
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node }}
-      - run: npm install
-      - run: npm run build --if-present
-      - run: npm test
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint and check dependencies
+        run: npm test
+
+      - name: Compile
+        run: npm run build
+
+      - name: Fetch mpv
+        run: npm run fetch-mpv
+
+      - name: Build the installer
+        run: npm run dist
+
+      - name: Build the portable zip
+        run: npm run dist:portable
+
+      - name: Check the files the updater needs were made
+        shell: bash
+        run: |
+          ls -la dist/
+          test -f dist/StreamTorrentSetup.exe
+          test -f dist/StreamTorrentSetup.exe.blockmap
+          test -f dist/latest.yml
+          ls dist/StreamTorrent-v*-win.zip

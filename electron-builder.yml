@@ -1,0 +1,71 @@
+# How the Windows installer and the files the updater needs are built.
+#
+#   npm run dist            installer + latest.yml + blockmap, into dist/
+#   npm run dist:portable   the portable zip, into dist/
+#
+# The installer is built by electron-builder because electron-updater, which
+# is what the app checks for new versions with, only understands what
+# electron-builder produces: the .exe, a latest.yml naming it and its hash,
+# and a .blockmap so an update downloads only the parts that changed.
+
+appId: com.streamtorrent.app
+productName: StreamTorrent
+copyright: Copyright (c) WebTorrent, LLC and helalsaeed2003
+
+directories:
+  output: dist
+
+# What goes inside app.asar. Everything not listed is left out: src/ is the
+# source babel compiles into build/, and vendor/ is handled separately below
+# because mpv has to stay a real file on disk for it to be run.
+files:
+  - index.js
+  - package.json
+  - build/**/*
+  - static/**/*
+  - '!static/screenshot.png'
+  - '!**/*.map'
+
+# mpv is run as its own program, so it cannot live inside the asar. This puts
+# it at resources/mpv/mpv.exe, which is where src/config.js looks for it.
+extraResources:
+  - from: vendor/mpv
+    to: mpv
+
+asar: true
+
+win:
+  icon: static/StreamTorrent.ico
+  target:
+    - nsis
+  # Windows will still warn the first time this is run: it is not signed with
+  # a code-signing certificate. The README explains the box the user sees.
+  signAndEditExecutable: true
+
+nsis:
+  # Installs for this user only, with no administrator prompt, and runs the
+  # app when it finishes - the same as the installer this replaces
+  oneClick: true
+  perMachine: false
+  allowToChangeInstallationDirectory: false
+
+  # The app asks about shortcuts itself the first time it runs, and writes
+  # them itself, so the installer does not make any
+  createDesktopShortcut: false
+  createStartMenuShortcut: false
+  shortcutName: Stream Torrent
+
+  # Uninstalling leaves the torrent list, watch progress and settings alone.
+  # They live in %LOCALAPPDATA%\StreamTorrentData, not in the install folder.
+  deleteAppDataOnUninstall: false
+
+  artifactName: StreamTorrentSetup.exe
+  uninstallDisplayName: StreamTorrent
+
+# Where the app looks for new versions, and where the release workflow puts
+# them. electron-updater reads the same settings at runtime.
+publish:
+  provider: github
+  owner: helalsaeed2003
+  repo: StreamTorrent
+  releaseType: release

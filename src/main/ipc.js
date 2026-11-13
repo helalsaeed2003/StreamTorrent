@@ -141,9 +141,9 @@ function init () {
     windows.main.dispatch(action, ...(args || []))
   })
 
-  // Looks in the folder the user keeps builds in, and swaps in a newer one
-  ipcMain.on('checkForUpdates', (e, folder) => {
-    require('./updater').checkForUpdates(folder)
+  // Help > Check for Updates
+  ipcMain.on('checkForUpdates', () => {
+    require('./updater').checkForUpdates()
   })
 
   /**
@@ -181,6 +181,8 @@ function init () {
     const shortcuts = require('./shortcuts')
     const thumbar = require('./thumbar')
 
+    // An update that has been fetched waits until this is over
+    require('./updater').setPlaying(true)
     menu.togglePlaybackControls(true)
     powerSaveBlocker.enable()
     shortcuts.enable()
@@ -199,6 +201,7 @@ function init () {
     const shortcuts = require('./shortcuts')
     const thumbar = require('./thumbar')
 
+    require('./updater').setPlaying(false)
     menu.togglePlaybackControls(false)
     powerSaveBlocker.disable()
     shortcuts.disable()
