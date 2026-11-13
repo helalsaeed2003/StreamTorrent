@@ -11,11 +11,8 @@
  *   npm run fetch-mpv            fetch it if vendor/mpv is missing or wrong
  *   npm run fetch-mpv -- --force fetch it again whatever is there
  *
- * The build is one of shinchiro's Windows builds of mpv. Those are kept for
- * about a month before they are cleared away, so MIRROR_URL points at a copy
- * kept with this project's own releases, which GitHub keeps for good. The
- * original is tried too, and either is accepted: both are checked against the
- * same hashes, so a swapped file is refused whichever it came from.
+ * It is fetched from the first of three places that answers, and whichever
+ * one it came from has to match the hashes below.
  */
 
 const crypto = require('crypto')
@@ -24,16 +21,28 @@ const os = require('os')
 const path = require('path')
 const { execFileSync } = require('child_process')
 
-// The build the app is made against. Change all four together.
+// The build the app is made against. Change all of this together.
+//
+// mpv publishes no Windows binaries of its own - mpv.io/installation says so
+// outright, and points at other people's builds - so this is shinchiro's,
+// which is the one it points at first. Three places are tried in turn, and
+// all three are checked against the same hashes, so a swapped file is refused
+// whichever it came from.
 const MPV = {
   version: 'v0.42.0-5-g55d3feb45',
   built: '2026-11-08',
-  // Where it came from. Nightly builds are cleared away after about a month.
-  url: 'https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/' +
-    '20261108/mpv-x86_64-20261108-git-55d3feb45c.7z',
-  // A copy kept with this project's own releases, which does not expire
-  mirror: 'https://github.com/helalsaeed2003/StreamTorrent/releases/download/' +
-    'mpv-20261108/mpv-x86_64-20261108-git-55d3feb45c.7z',
+  from: [
+    // A copy kept with this project's own releases, which nothing clears away
+    'https://github.com/helalsaeed2003/StreamTorrent/releases/download/' +
+      'mpv-20261108/mpv-x86_64-20261108-git-55d3feb45c.7z',
+    // The same build on the same author's SourceForge, which keeps its
+    // older files rather than rolling them off
+    'https://downloads.sourceforge.net/project/mpv-player-windows/64bit/' +
+      'mpv-x86_64-20261108-git-55d3feb45c.7z',
+    // Where it was built. These are cleared away after about a month.
+    'https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/' +
+      '20261108/mpv-x86_64-20261108-git-55d3feb45c.7z'
+  ],
   archiveSha256:
     '465faafbf90527421ccc304870f02e59f3f47d3361a6f526ef95f40f8f2c2459',
   // What has to come out of it, and what each one must hash to
@@ -125,7 +134,7 @@ async function main () {
 
   let fetched = false
   const tried = []
-  for (const url of [MPV.mirror, MPV.url]) {
+  for (const url of MPV.from) {
     try {
       await download(url, archive)
       fetched = true

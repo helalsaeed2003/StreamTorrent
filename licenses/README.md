@@ -27,6 +27,13 @@ sits in `resources/mpv` next to the app.
 - Downloaded at build time by [`bin/fetch-mpv.js`](../bin/fetch-mpv.js), which
   checks it against a pinned SHA-256 before unpacking it. It is not kept in
   this repository, because it is larger than GitHub will accept.
+- mpv publishes no Windows binaries of its own: [mpv.io/installation](https://mpv.io/installation)
+  says every Windows package is a third-party build, and points at this one
+  first. The archive is fetched from whichever of these answers, all checked
+  against the same hash: a copy kept with this project's own releases, the
+  same build on
+  [SourceForge](https://sourceforge.net/projects/mpv-player-windows/files/64bit/),
+  and the original upstream release.
 
 mpv is used as a separate program, started as its own process and spoken to
 over a pipe. It is not linked into StreamTorrent.
