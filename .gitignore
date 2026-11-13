@@ -17,3 +17,28 @@ vendor/
 
 # One-off repair script from testing, kept locally, not part of the app
 cleanup-webtorrent-config.js
+
+# Local settings and secrets
+.env
+.env.*
+*.local
+settings.local.json
+.claude/settings.local.json
+
+# Logs
+*.log
+logs/
+
+# Anything downloaded or dropped in the project root while testing
+Downloads/
+/*.torrent
+
+# Build leftovers
+*.nupkg
+RELEASES
+
+# OS and editor cruft
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.swp
