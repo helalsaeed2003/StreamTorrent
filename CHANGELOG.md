@@ -4,7 +4,7 @@ All notable changes to StreamTorrent are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0] - 2026-11-13
+## [0.98.3] - 2026-11-13
 
 First public release. StreamTorrent is a fork of
 [WebTorrent Desktop](https://github.com/webtorrent/webtorrent-desktop) 0.24.0;
@@ -94,4 +94,4 @@ what follows is what is different, and what the first release can do.
   preferences carried over from anyone.
 - Everything downloaded is deleted when the app quits.
 
-[1.0.0]: https://github.com/helalsaeed2003/StreamTorrent/releases/tag/v1.0.0
+[0.98.3]: https://github.com/helalsaeed2003/StreamTorrent/releases/tag/v0.98.3

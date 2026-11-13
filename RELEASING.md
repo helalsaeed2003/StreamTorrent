@@ -5,15 +5,15 @@ you change a number, write down what changed, and push a tag.
 
 ## The five steps
 
-Say the current version is 1.0.0 and you are putting out 1.0.1.
+Say the current version is 0.98.3 and you are putting out 0.98.4.
 
 **1. Set the version.** In `package.json`, change the `"version"` line:
 
 ```json
-"version": "1.0.1",
+"version": "0.98.4",
 ```
 
-Use 1.0.**1** for fixes, 1.**1**.0 for new features, **2**.0.0 for something
+Use 0.98.**4** for fixes, 0.**99**.0 for new features, **1**.0.0 for something
 that changes how it works from top to bottom.
 
 **2. Write down what changed.** In `CHANGELOG.md`, add a section above the
@@ -21,7 +21,7 @@ previous one. Keep the heading in exactly this shape, or the release notes
 come out empty:
 
 ```markdown
-## [1.0.1] - 2026-12-01
+## [0.98.4] - 2026-12-01
 
 ### Fixed
 
@@ -32,15 +32,15 @@ come out empty:
 
 ```bash
 git add package.json CHANGELOG.md
-git commit -m "release: 1.0.1"
+git commit -m "release: 0.98.4"
 git push
 ```
 
 **4. Tag it.** The `v` matters.
 
 ```bash
-git tag v1.0.1
-git push origin v1.0.1
+git tag v0.98.4
+git push origin v0.98.4
 ```
 
 **5. Wait about three minutes.** Pushing the tag starts the build. Watch it at
@@ -62,18 +62,18 @@ or straight away if they restart the app.
 
 It will tell you which step. The two usual ones:
 
-- **"The tag says 1.0.1 but package.json says 1.0.0"** — you tagged before
+- **"The tag says 0.98.4 but package.json says 0.98.3"** — you tagged before
   committing the version bump. Delete the tag and do it again:
 
   ```bash
-  git push --delete origin v1.0.1
-  git tag -d v1.0.1
+  git push --delete origin v0.98.4
+  git tag -d v0.98.4
   ```
 
   then fix `package.json`, commit, push, and tag again.
 
-- **"CHANGELOG.md has no section for 1.0.1"** — the heading does not match.
-  It has to start `## [1.0.1]` or `## 1.0.1`.
+- **"CHANGELOG.md has no section for 0.98.4"** — the heading does not match.
+  It has to start `## [0.98.4]` or `## 0.98.4`.
 
 You can also rebuild a tag that is already pushed without touching anything:
 Actions → Release → **Run workflow** → type the tag.

@@ -2,10 +2,10 @@
 /**
  * Prints the CHANGELOG section for one version, for the release notes.
  *
- *   node bin/changelog-for.js 1.0.0
- *   node bin/changelog-for.js v1.0.0 > notes.md
+ *   node bin/changelog-for.js 0.98.3
+ *   node bin/changelog-for.js v0.98.3 > notes.md
  *
- * It takes everything under the "## [1.0.0] - date" heading up to the next
+ * It takes everything under the "## [0.98.3] - date" heading up to the next
  * "## " heading, with the link definitions at the bottom left out. If there
  * is no section for that version it says so and exits 1, so a release is not
  * published with empty notes by accident.
@@ -23,7 +23,7 @@ if (!wanted) {
 const file = path.join(__dirname, '..', 'CHANGELOG.md')
 const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/)
 
-// "## [1.0.0] - 2026-11-13" or "## 1.0.0"
+// "## [0.98.3] - 2026-11-13" or "## 0.98.3"
 const heading = new RegExp('^##\\s+\\[?' +
   wanted.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\]?(\\s|$)')
 
