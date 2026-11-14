@@ -15,8 +15,9 @@ EAC3, DTS and embedded subtitles all play with nothing to install.
   — the installer. This is the one you want. No administrator password, and it
   updates itself from then on.
 - **[StreamTorrent-win.zip](https://github.com/helalsaeed2003/StreamTorrent/releases/latest/download/StreamTorrent-win.zip)**
-  — portable. Unzip anywhere, run `StreamTorrent.exe`. Settings stay in the
-  folder beside it. Does not update itself.
+  — portable. Unzip anywhere, run `StreamTorrent.exe`. Everything it keeps goes
+  in a `Portable Settings` folder inside that same unzipped folder, so it
+  leaves nothing on the machine. Does not update itself.
 
 Both links always give the newest version. Older ones are on the
 [Releases page](https://github.com/helalsaeed2003/StreamTorrent/releases).
@@ -48,9 +49,12 @@ Kept outside the program folder, so installing and updating never touch it:
 %LOCALAPPDATA%\StreamTorrentData\
 ```
 
-Holds the torrent list, where you got to in each video, and settings. The
-portable build keeps the same thing in `Portable Settings` beside the
-executable. To start over, quit and delete that folder.
+Holds the torrent list, where you got to in each video, and settings. To start
+over, quit and delete that folder.
+
+The portable build keeps all of that inside its own folder instead, in
+`Portable Settings` next to `StreamTorrent.exe`, and writes nothing anywhere
+else. Delete the unzipped folder and it is gone.
 
 ## Building it
 
