@@ -47,4 +47,4 @@ jobs:
           test -f dist/StreamTorrentSetup.exe
           test -f dist/StreamTorrentSetup.exe.blockmap
           test -f dist/latest.yml
-          ls dist/StreamTorrent-v*-win.zip
+          ls dist/StreamTorrent-win.zip

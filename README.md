@@ -11,13 +11,15 @@ EAC3, DTS and embedded subtitles all play with nothing to install.
 
 ## Download
 
-From the **[Releases page](https://github.com/helalsaeed2003/StreamTorrent/releases/latest)**:
+- **[StreamTorrentSetup.exe](https://github.com/helalsaeed2003/StreamTorrent/releases/latest/download/StreamTorrentSetup.exe)**
+  — the installer. This is the one you want. No administrator password, and it
+  updates itself from then on.
+- **[StreamTorrent-win.zip](https://github.com/helalsaeed2003/StreamTorrent/releases/latest/download/StreamTorrent-win.zip)**
+  — portable. Unzip anywhere, run `StreamTorrent.exe`. Settings stay in the
+  folder beside it. Does not update itself.
 
-- **`StreamTorrentSetup.exe`** — the installer. This is the one you want. No
-  administrator password, and it updates itself from then on.
-- **`StreamTorrent-<version>-win.zip`** — portable. Unzip anywhere, run
-  `StreamTorrent.exe`. Settings stay in the folder beside it. Does not update
-  itself.
+Both links always give the newest version. Older ones are on the
+[Releases page](https://github.com/helalsaeed2003/StreamTorrent/releases).
 
 Windows 10 or later, 64-bit.
 

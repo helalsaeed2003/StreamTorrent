@@ -93,7 +93,7 @@ jobs:
           if ! ls dist/*.blockmap >/dev/null 2>&1; then
             echo "missing: a .blockmap"; missing=1
           fi
-          if ! ls dist/StreamTorrent-v*-win.zip >/dev/null 2>&1; then
+          if ! ls dist/StreamTorrent-win.zip >/dev/null 2>&1; then
             echo "missing: the portable zip"; missing=1
           fi
           [ "$missing" = "0" ] || exit 1
@@ -112,4 +112,4 @@ jobs:
             dist/StreamTorrentSetup.exe
             dist/StreamTorrentSetup.exe.blockmap
             dist/latest.yml
-            dist/StreamTorrent-v*-win.zip
+            dist/StreamTorrent-win.zip

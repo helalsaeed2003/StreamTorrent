@@ -17,11 +17,11 @@ const path = require('path')
 const { execFileSync } = require('child_process')
 
 const ROOT = path.join(__dirname, '..')
-const pkg = require(path.join(ROOT, 'package.json'))
 
 const UNPACKED = path.join(ROOT, 'dist', 'win-unpacked')
-const OUT = path.join(ROOT, 'dist',
-  'StreamTorrent-v' + pkg.version + '-win.zip')
+// A fixed name, so the download link on the front page keeps working from one
+// release to the next. The version is in Help > About and on the release page.
+const OUT = path.join(ROOT, 'dist', 'StreamTorrent-win.zip')
 
 function find7z () {
   const bundled = path.join(ROOT, 'node_modules', 'electron-winstaller',
