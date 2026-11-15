@@ -4,6 +4,46 @@ All notable changes to StreamTorrent are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.98.5] - 2026-11-16
+
+### Pictures
+
+- **Keys for stepping through a folder.** Left and right, or A and D, move one
+  picture; up and down, or W and S, move ten; space starts and stops the
+  slideshow; F fills the screen. A jump of ten past either end lands on the
+  last picture there is rather than doing nothing.
+- **A row of buttons in the middle of the bar** — ten back, one back, play,
+  one on, ten on — with "17 of 3809" beside them, so a folder has a position
+  and a length rather than only a next and a previous.
+- **A slideshow**, at a number of seconds you set in the bar itself or in
+  Preferences. It stops at the end of the folder instead of looping, and any
+  step of your own restarts the wait so a slide is never cut short.
+- **Zoom.** The wheel zooms around the pointer, double click goes in and back
+  out, and dragging moves the picture exactly as far as the pointer moves.
+- **Filling the window**, top to bottom, with a button on the bar. The edges
+  of a picture shaped differently from the window are cut off, which is what
+  filling it means.
+- **The next pictures are fetched while you look at this one**, ten by
+  default, set in Preferences. They are asked for from the torrent rather
+  than fetched over HTTP: the built-in server holds a connection open until a
+  file arrives and a browser allows only six to one host, so fetching ahead
+  that way starved the picture on screen.
+
+### Torrents
+
+- Folder rows say how big a folder is, not only how many files are in it:
+  "71 GB · 129 files".
+
+### Fixed
+
+- Dragging a picture ended in "Please go back to the torrent list before
+  creating a new torrent". Chromium was dragging the picture out of the app
+  and the drop landed back on the window as a file.
+- A zoomed picture lurched while it was being dragged. Once it had moved far
+  enough the pointer was no longer over it, so the moves stopped arriving
+  until the pointer caught up with it again.
+- Pictures are no longer drawn behind the bar along the bottom.
+
 ## [0.98.4] - 2026-11-15
 
 ### Changed
@@ -117,5 +157,6 @@ what follows is what is different, and what the first release can do.
   preferences carried over from anyone.
 - Everything downloaded is deleted when the app quits.
 
+[0.98.5]: https://github.com/helalsaeed2003/StreamTorrent/releases/tag/v0.98.5
 [0.98.4]: https://github.com/helalsaeed2003/StreamTorrent/releases/tag/v0.98.4
 [0.98.3]: https://github.com/helalsaeed2003/StreamTorrent/releases/tag/v0.98.3
