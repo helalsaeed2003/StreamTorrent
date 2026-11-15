@@ -104,6 +104,14 @@ function getDefaultState () {
     preloads: new Map(),
 
     /*
+     * The pictures after the one on screen, which the image viewer asks for
+     * while it is open so that stepping forward does not wait for a
+     * download. Kept apart from the preloads above, which the user chose
+     * with the cloud button and which outlive the viewer.
+     */
+    imageAhead: { infoHash: null, indexes: [] },
+
+    /*
      * Saved state is read from and written to a file every time the app runs.
      * It should be simple and minimal and must be JSON.
      * It must never contain absolute paths since we have a portable app.
@@ -142,6 +150,10 @@ function getDefaultPlayState () {
     duration: 1, /* seconds */
     isReady: false,
     imageLoaded: false, /* image viewer: has the picture itself arrived yet */
+    slideshow: false, /* image viewer: stepping through on its own */
+    zoom: 1, /* image viewer: how far in, 1 means the whole picture */
+    zoomX: 0.5, /* what the zoom is centred on, 0 to 1 across the picture */
+    zoomY: 0.5,
     resumedFrom: null, /* seconds we resumed from, for the "Resumed from" note */
     resumeOffer: null, /* seconds we could jump to, offered when a video opens */
     resumeOfferedAt: 0, /* when that offer was made, so it can time out */
@@ -185,6 +197,8 @@ function setupStateSaved () {
       globalTrackers: defaultAnnounceList,
       tempPath: '', /* '' means the default folder, inside the program folder */
       playlistFollowsSearch: true, /* Next and Previous follow an open search */
+      slideshowSeconds: 6, /* image viewer: how long each picture is shown */
+      imagePreloadCount: 10, /* image viewer: pictures fetched ahead */
       searchHistory: true /* the search box remembers and offers what was typed */
     },
     torrents: config.DEFAULT_TORRENTS.map(createTorrentObject),

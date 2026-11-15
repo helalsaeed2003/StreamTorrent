@@ -282,8 +282,14 @@ module.exports = class TorrentListController {
       ? state.streaming.fileIndex
       : -1
 
+    // What the image viewer wants next, for as long as it is open on this
+    // torrent
+    const ahead = state.imageAhead && state.imageAhead.infoHash === infoHash
+      ? state.imageAhead.indexes
+      : []
+
     torrentSummary.selections = torrentSummary.files.map(
-      (file, i) => preloads.has(i) || i === streamingIndex)
+      (file, i) => preloads.has(i) || ahead.includes(i) || i === streamingIndex)
 
     if (torrentSummary.selections.some(Boolean)) {
       if (torrentSummary.status === 'paused') {

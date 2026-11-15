@@ -403,6 +403,12 @@ const dispatchHandlers = {
   playPause: () => controllers.playback().playPause(),
   nextTrack: () => controllers.playback().nextTrack(),
   previousTrack: () => controllers.playback().previousTrack(),
+  jumpImages: (by) => controllers.playback().jumpImages(by),
+  applySelections: (infoHash) => controllers.torrentList().applySelections(infoHash),
+  toggleSlideshow: (on) => controllers.playback().toggleSlideshow(on),
+  zoomImageBy: (steps, at) => controllers.playback().zoomImageBy(steps, at),
+  toggleImageZoom: (at) => controllers.playback().toggleImageZoom(at),
+  panImage: (dx, dy) => controllers.playback().panImage(dx, dy),
   skip: (time) => controllers.playback().skip(time),
   skipTo: (time) => controllers.playback().skipTo(time),
   setScrubbing: (on) => controllers.playback().setScrubbing(on),
@@ -706,6 +712,15 @@ function setDimensions (dimensions) {
 function onOpen (files) {
   if (!Array.isArray(files)) files = [files]
 
+  // Dragging something inside the app - a picture out of the viewer, say -
+  // ends as a drop of our own address back onto the window. That is not a
+  // torrent anyone asked to add, so it is ignored rather than answered with
+  // an error about creating one.
+  const ours = state.server && state.server.localURL
+  files = files.filter(file =>
+    typeof file !== 'string' || !ours || !file.startsWith(ours))
+  if (files.length === 0) return
+
   // File API seems to transform "magnet:?foo" in "magnet:///?foo"
   // this is a sanitization
   files = files.map(file => {
@@ -791,10 +806,22 @@ function onKeydown (e) {
   // prevent event fire on user input elements
   if (editableHtmlTags.has(e.target.tagName.toLowerCase())) return
 
-  // In the image viewer, the arrow keys step through the images in the folder
+  // The image viewer has keys of its own: the arrows and WASD step through
+  // the folder, space runs the slideshow, F fills the screen
   if (state.location.url() === 'player' && state.playing.type === 'image') {
-    if (key === 'ArrowLeft') dispatch('previousTrack')
-    else if (key === 'ArrowRight') dispatch('nextTrack')
+    const lower = key.length === 1 ? key.toLowerCase() : key
+
+    if (lower === 'ArrowLeft' || lower === 'a') dispatch('previousTrack')
+    else if (lower === 'ArrowRight' || lower === 'd') dispatch('nextTrack')
+    else if (lower === 'ArrowUp' || lower === 'w') dispatch('jumpImages', 10)
+    else if (lower === 'ArrowDown' || lower === 's') dispatch('jumpImages', -10)
+    else if (lower === ' ' || key === 'Spacebar') dispatch('toggleSlideshow')
+    else if (lower === 'f') dispatch('toggleFullScreen')
+    else { update(); return }
+
+    // Space scrolls the page and the arrows move the cursor: neither should
+    // happen while a picture is open
+    e.preventDefault()
     update()
     return
   }

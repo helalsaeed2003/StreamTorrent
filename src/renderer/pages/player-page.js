@@ -334,6 +334,7 @@ function renderMedia (state) {
 function renderImageViewer (state) {
   const url = Playlist.getCurrentLocalURL(state)
   const isLoaded = state.playing.imageLoaded
+  const zoom = state.playing.zoom || 1
 
   const elems = []
 
@@ -343,11 +344,23 @@ function renderImageViewer (state) {
     elems.push(
       <img
         key={'image-' + state.playing.fileIndex}
-        className={'image-view' + (isLoaded ? '' : ' loading')}
+        className={'image-view' + (isLoaded ? '' : ' loading') +
+          (zoom > 1 ? ' zoomed' : '')}
         src={url}
         alt={state.playing.fileName}
+        draggable={false}
+        style={zoom > 1
+          ? {
+              transform: 'scale(' + zoom + ')',
+              transformOrigin: (state.playing.zoomX * 100) + '% ' +
+                (state.playing.zoomY * 100) + '%'
+            }
+          : null}
         onLoad={dispatcher('imageLoaded')}
         onError={dispatcher('imageError')}
+        onDoubleClick={handleImageDoubleClick}
+        onMouseDown={handleImageMouseDown}
+        onMouseMove={handleImagePan}
       />
     )
   }
@@ -385,12 +398,33 @@ function renderImageViewer (state) {
   return (
     <div
       key='letterbox'
-      className='letterbox image-viewer'
+      className={'letterbox image-viewer' + (zoom > 1 ? ' zoomed' : '')}
       onMouseMove={dispatcher('mediaMouseMoved')}
+      onWheel={handleImageWheel}
     >
       {elems}
     </div>
   )
+}
+
+// The wheel zooms in and out, around whatever the pointer is over
+function handleImageWheel (e) {
+  if (e.deltaY === 0) return
+  const box = e.currentTarget.getBoundingClientRect()
+  const at = {
+    x: (e.clientX - box.left) / box.width,
+    y: (e.clientY - box.top) / box.height
+  }
+  dispatch('zoomImageBy', e.deltaY < 0 ? 1 : -1, at)
+}
+
+// Double click: in on that spot, or back out to the whole picture
+function handleImageDoubleClick (e) {
+  const box = e.currentTarget.getBoundingClientRect()
+  dispatch('toggleImageZoom', {
+    x: (e.clientX - box.left) / box.width,
+    y: (e.clientY - box.top) / box.height
+  })
 }
 
 // Spinner and download progress, shown until the picture itself arrives
@@ -417,10 +451,48 @@ function renderImageLoading (state) {
   )
 }
 
-// Controls for the image viewer: previous, next, full screen and the file name
+/**
+ * Stops Chromium dragging the picture out of the app. Without this, letting
+ * go lands the picture back on the window as a dropped file, which used to
+ * be answered with "go back to the torrent list before creating a torrent".
+ */
+function handleImageMouseDown (e) {
+  if (e.button === 0) e.preventDefault()
+}
+
+/**
+ * Holding the picture and moving the mouse pans it, once it is zoomed in.
+ * How far the pointer moved is taken from the event itself, so there is
+ * nothing to remember between one move and the next.
+ */
+function handleImagePan (e) {
+  if (e.buttons !== 1) return
+
+  const box = e.currentTarget.getBoundingClientRect()
+  if (box.width === 0 || box.height === 0) return
+
+  const native = e.nativeEvent || e
+  const dx = native.movementX || 0
+  const dy = native.movementY || 0
+  if (dx === 0 && dy === 0) return
+
+  // Dragging left looks at what is further right, so the sign is flipped
+  dispatch('panImage', -dx / box.width, -dy / box.height)
+}
+
+/**
+ * The bar along the bottom of the image viewer: the file name, the buttons
+ * in the middle, and full screen on the right. The buttons are the ones a
+ * player has - ten back, one back, play, one on, ten on - because that is
+ * what the keys do as well.
+ */
 function renderImageControls (state) {
+  const position = Playlist.getPosition(state)
   const prevClass = Playlist.hasPrevious(state) ? '' : 'disabled'
   const nextClass = Playlist.hasNext(state) ? '' : 'disabled'
+  const backTenClass = Playlist.getIndexAhead(state, -10, true) == null ? 'disabled' : ''
+  const onTenClass = Playlist.getIndexAhead(state, 10, true) == null ? 'disabled' : ''
+  const running = !!state.playing.slideshow
 
   return (
     <div
@@ -428,36 +500,82 @@ function renderImageControls (state) {
       onMouseEnter={dispatcher('mediaControlsMouseEnter')}
       onMouseLeave={dispatcher('mediaControlsMouseLeave')}
     >
-      <i
-        key='skip-previous'
-        className={'icon skip-previous float-left ' + prevClass}
-        onClick={dispatcher('previousTrack')}
-        role='button'
-        aria-label='Previous image'
-      >
-        skip_previous
-      </i>
-      <i
-        key='skip-next'
-        className={'icon skip-next float-left ' + nextClass}
-        onClick={dispatcher('nextTrack')}
-        role='button'
-        aria-label='Next image'
-      >
-        skip_next
-      </i>
+      <span key='name' className='time float-left ellipsis'>
+        {state.playing.fileName}
+      </span>
+
+      <div key='deck' className='image-deck'>
+        {position
+          ? (
+            <div key='count' className='image-count'>
+              {position.at} of {position.total}
+            </div>
+            )
+          : null}
+        <div key='buttons' className='image-buttons'>
+          <i
+            key='back-ten'
+            className={'icon ' + backTenClass}
+            onClick={dispatcher('jumpImages', -10)}
+            role='button'
+            title='Back ten (down arrow or S)'
+            aria-label='Back ten images'
+          >
+            fast_rewind
+          </i>
+          <i
+            key='skip-previous'
+            className={'icon ' + prevClass}
+            onClick={dispatcher('previousTrack')}
+            role='button'
+            title='Previous (left arrow or A)'
+            aria-label='Previous image'
+          >
+            skip_previous
+          </i>
+          <i
+            key='play-pause'
+            className='icon play-pause'
+            onClick={dispatcher('toggleSlideshow')}
+            role='button'
+            title={running ? 'Stop the slideshow (space)' : 'Start the slideshow (space)'}
+            aria-label={running ? 'Stop the slideshow' : 'Start the slideshow'}
+          >
+            {running ? 'pause' : 'play_arrow'}
+          </i>
+          <i
+            key='skip-next'
+            className={'icon ' + nextClass}
+            onClick={dispatcher('nextTrack')}
+            role='button'
+            title='Next (right arrow or D)'
+            aria-label='Next image'
+          >
+            skip_next
+          </i>
+          <i
+            key='on-ten'
+            className={'icon ' + onTenClass}
+            onClick={dispatcher('jumpImages', 10)}
+            role='button'
+            title='On ten (up arrow or W)'
+            aria-label='On ten images'
+          >
+            fast_forward
+          </i>
+        </div>
+      </div>
+
       <i
         key='fullscreen'
         className='icon fullscreen float-right'
         onClick={dispatcher('toggleFullScreen')}
         role='button'
+        title='Full screen (F)'
         aria-label={state.window.isFullScreen ? 'Exit full screen' : 'Enter full screen'}
       >
         {state.window.isFullScreen ? 'fullscreen_exit' : 'fullscreen'}
       </i>
-      <span key='name' className='time float-left ellipsis'>
-        {state.playing.fileName}
-      </span>
     </div>
   )
 }

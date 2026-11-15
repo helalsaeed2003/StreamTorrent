@@ -80,6 +80,10 @@ module.exports = class PlaybackController {
     const state = this.state
     if (state.location.url() !== 'player') return
 
+    // A picture has nothing to play: the same button, and the same key,
+    // start and stop stepping through the folder
+    if (state.playing.type === 'image') return this.toggleSlideshow()
+
     // force rerendering if window is hidden,
     // in order to bypass `raf` and play/pause media immediately
     const mediaTag = document.querySelector('video,audio')
@@ -103,9 +107,165 @@ module.exports = class PlaybackController {
     dispatch('prioritizeTorrent', infoHash)
   }
 
+  /**
+   * Asks the torrent engine for the next few pictures in the folder, so that
+   * stepping forward finds them already downloaded.
+   *
+   * They are asked for as torrent selections, not fetched over HTTP: the
+   * built-in server holds a connection open until a file has arrived, and a
+   * browser allows only six to one host, so fetching ahead that way starves
+   * the picture the user is actually looking at.
+   */
+  preloadAhead () {
+    const state = this.state
+    const ahead = state.imageAhead || (state.imageAhead = { infoHash: null, indexes: [] })
+
+    let wanted = []
+    let infoHash = null
+
+    if (state.location.url() === 'player' && state.playing.type === 'image') {
+      const prefs = state.saved.prefs || {}
+      const count = Number(prefs.imagePreloadCount)
+      infoHash = state.playing.infoHash
+      if (count > 0) {
+        wanted = Playlist.getUpcomingIndexes(state, Math.min(count, 50))
+      }
+    }
+
+    const same = ahead.infoHash === infoHash &&
+      ahead.indexes.length === wanted.length &&
+      ahead.indexes.every((index, at) => index === wanted[at])
+    if (same) return
+
+    const was = ahead.infoHash
+    ahead.infoHash = infoHash
+    ahead.indexes = wanted
+
+    // The torrent being left behind has to be told as well, or it goes on
+    // fetching pictures nobody is looking at any more
+    if (was && was !== infoHash) dispatch('applySelections', was)
+    if (infoHash) dispatch('applySelections', infoHash)
+  }
+
+  /**
+   * Steps through the pictures in a folder on its own, a slide at a time.
+   * The timer lives here rather than in the page because the page is redrawn
+   * constantly and would restart it every time.
+   */
+  toggleSlideshow (on) {
+    const state = this.state
+    const wanted = on == null ? !state.playing.slideshow : !!on
+
+    state.playing.slideshow = wanted
+    if (!wanted) return this.stopSlideshow()
+
+    this.restartSlideshow()
+  }
+
+  // Starts the wait for the next picture again, at the length set in
+  // Preferences. Called after every step, so holding Next does not leave a
+  // slide cut short.
+  restartSlideshow () {
+    const state = this.state
+    this.stopSlideshow()
+    if (!state.playing.slideshow) return
+
+    const seconds = Number(state.saved.prefs.slideshowSeconds)
+    const wait = Number.isFinite(seconds) && seconds > 0 ? seconds : 6
+
+    this.slideshowTimer = setTimeout(() => {
+      this.slideshowTimer = null
+      if (!this.state.playing.slideshow) return
+
+      // At the end it stops rather than wrapping round, so an unattended
+      // slideshow does not loop over the same folder for ever
+      if (!Playlist.hasNext(this.state)) {
+        this.state.playing.slideshow = false
+        dispatch('update')
+        return
+      }
+
+      this.nextTrack()
+      dispatch('update')
+    }, wait * 1000)
+  }
+
+  stopSlideshow () {
+    if (!this.slideshowTimer) return
+    clearTimeout(this.slideshowTimer)
+    this.slideshowTimer = null
+  }
+
+  /**
+   * Jumps several pictures at once, for the ten-at-a-time keys. Past either
+   * end it lands on the last picture there is rather than doing nothing.
+   */
+  jumpImages (by) {
+    const state = this.state
+    if (state.playing.type !== 'image') return
+    if (state.playing.location === 'external') return
+
+    const index = Playlist.getIndexAhead(state, by, true)
+    if (index == null) return
+
+    this.updatePlayer(state.playing.infoHash, index, false, (err) => {
+      if (err) dispatch('error', err)
+      else this.play()
+    })
+    this.restartSlideshow()
+  }
+
+  /**
+   * How far into the picture the viewer is. The point it zooms around is
+   * where the pointer was, so the wheel pulls what is under it closer.
+   */
+  zoomImage (to, at) {
+    const state = this.state
+    if (state.playing.type !== 'image') return
+
+    const was = state.playing.zoom || 1
+    const wanted = Math.max(1, Math.min(8, Number(to) || 1))
+    if (wanted === was) return
+
+    state.playing.zoom = wanted
+    if (wanted === 1) {
+      state.playing.zoomX = 0.5
+      state.playing.zoomY = 0.5
+      return
+    }
+    if (at && Number.isFinite(at.x) && Number.isFinite(at.y)) {
+      state.playing.zoomX = Math.max(0, Math.min(1, at.x))
+      state.playing.zoomY = Math.max(0, Math.min(1, at.y))
+    }
+  }
+
+  // The wheel: a notch in zooms, a notch out zooms back
+  zoomImageBy (steps, at) {
+    const state = this.state
+    const was = state.playing.zoom || 1
+    this.zoomImage(was * Math.pow(1.25, steps), at)
+  }
+
+  // Double click: all the way out, or twice the size, around that point
+  toggleImageZoom (at) {
+    const state = this.state
+    if ((state.playing.zoom || 1) > 1) this.zoomImage(1)
+    else this.zoomImage(2, at)
+  }
+
+  // Dragging a zoomed picture moves what is on show. The numbers are a
+  // fraction of the picture, so they do not depend on how big the window is.
+  panImage (dx, dy) {
+    const state = this.state
+    if ((state.playing.zoom || 1) <= 1) return
+    state.playing.zoomX = Math.max(0, Math.min(1, (state.playing.zoomX || 0.5) + dx))
+    state.playing.zoomY = Math.max(0, Math.min(1, (state.playing.zoomY || 0.5) + dy))
+  }
+
   // Play next file in list (if any)
   nextTrack () {
     const state = this.state
+    this.restartSlideshow()
     if (Playlist.hasNext(state) && state.playing.location !== 'external') {
       this.updatePlayer(
         state.playing.infoHash, Playlist.getNextIndex(state), false, (err) => {
@@ -118,6 +278,7 @@ module.exports = class PlaybackController {
   // Play previous track in list (if any)
   previousTrack () {
     const state = this.state
+    this.restartSlideshow()
     if (Playlist.hasPrevious(state) && state.playing.location !== 'external') {
       this.updatePlayer(
         state.playing.infoHash, Playlist.getPreviousIndex(state), false, (err) => {
@@ -427,8 +588,15 @@ module.exports = class PlaybackController {
           : 'other'
 
     // Each picture has to be fetched before it can be shown, so the viewer
-    // starts out waiting again every time the user steps to another one
-    if (state.playing.type === 'image') state.playing.imageLoaded = false
+    // starts out waiting again every time the user steps to another one, and
+    // the next one is shown whole rather than at the zoom the last one was at
+    if (state.playing.type === 'image') {
+      state.playing.imageLoaded = false
+      state.playing.zoom = 1
+      state.playing.zoomX = 0.5
+      state.playing.zoomY = 0.5
+      setTimeout(() => this.preloadAhead(), 0)
+    }
 
     // Always start at the beginning, and offer to jump to where the user left
     // off. The position is saved alongside the magnet link, not with the
@@ -493,6 +661,18 @@ module.exports = class PlaybackController {
 
     // Nothing is left half-dragged behind a player that has gone
     this.pausedForScrubbing = false
+
+    // ...and no slideshow goes on stepping through a folder nobody is looking at
+    this.stopSlideshow()
+
+    // Pictures asked for ahead of the viewer are no longer wanted
+    const ahead = this.state.imageAhead
+    if (ahead && ahead.infoHash) {
+      const was = ahead.infoHash
+      ahead.infoHash = null
+      ahead.indexes = []
+      dispatch('applySelections', was)
+    }
 
     // Quit any external players, like Chromecast/Airplay/etc or VLC
     const state = this.state

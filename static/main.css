@@ -1131,10 +1131,72 @@ video::-webkit-media-text-track-container {
 }
 
 .player .controls.image-controls .time {
-  max-width: calc(100% - 160px);
+  max-width: calc(50% - 150px);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+/* Zoomed in, the picture is dragged around rather than scrolled */
+.player .image-view.zoomed {
+  cursor: grab;
+}
+
+.player .image-view.zoomed:active {
+  cursor: grabbing;
+}
+
+/* Fetched ahead of where the user is, never shown */
+.player .image-preload {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* The buttons sit in the middle of the bar, whatever the file is called */
+.player .controls.image-controls .image-deck {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  transform: translateX(-50%);
+  text-align: center;
+  -webkit-app-region: no-drag;
+}
+
+.player .controls.image-controls .image-count {
+  font-size: 12px;
+  opacity: 0.7;
+  margin-bottom: 2px;
+}
+
+.player .controls.image-controls .image-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.player .controls.image-controls .image-buttons .icon {
+  font-size: 28px;
+  padding: 2px 4px;
+  opacity: 0.85;
+  cursor: default;
+  user-select: none;
+}
+
+.player .controls.image-controls .image-buttons .icon:hover {
+  opacity: 1;
+}
+
+.player .controls.image-controls .image-buttons .icon.disabled {
+  opacity: 0.25;
+  pointer-events: none;
+}
+
+.player .controls.image-controls .image-buttons .icon.play-pause {
+  font-size: 36px;
 }
 
 /*

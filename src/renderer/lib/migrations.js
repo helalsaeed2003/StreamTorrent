@@ -255,6 +255,13 @@ function fillInNewSettings (saved) {
     saved.prefs.searchHistory = true
   }
 
+  if (saved.prefs.slideshowSeconds == null) {
+    saved.prefs.slideshowSeconds = 6
+  }
+  if (saved.prefs.imagePreloadCount == null) {
+    saved.prefs.imagePreloadCount = 10
+  }
+
   // Torrent files and magnet links used to be one setting, taken or given up
   // together. A config written before they were separated answers for both.
   if (saved.prefs.isTorrentHandler == null) {

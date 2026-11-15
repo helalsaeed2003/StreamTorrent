@@ -307,6 +307,63 @@ class PreferencesPage extends React.Component {
     )
   }
 
+  // How long each picture is shown for while a slideshow is running
+  slideshowSecondsField () {
+    const prefs = this.props.state.saved.prefs
+    const seconds = prefs.slideshowSeconds == null ? 6 : prefs.slideshowSeconds
+
+    return (
+      <Preference>
+        <TextField
+          className='control'
+          type='number'
+          min='1'
+          max='600'
+          style={{ width: 80 }}
+          value={String(seconds)}
+          onChange={(e, value) => this.handleNumberPref('slideshowSeconds', value, 6)}
+        />
+        <p>
+          Seconds each picture is shown for when the slideshow is running.
+          Space starts and stops it.
+        </p>
+      </Preference>
+    )
+  }
+
+  // How many pictures are fetched ahead of the one on screen
+  imagePreloadField () {
+    const prefs = this.props.state.saved.prefs
+    const count = prefs.imagePreloadCount == null ? 10 : prefs.imagePreloadCount
+
+    return (
+      <Preference>
+        <TextField
+          className='control'
+          type='number'
+          min='0'
+          max='50'
+          style={{ width: 80 }}
+          value={String(count)}
+          onChange={(e, value) => this.handleNumberPref('imagePreloadCount', value, 10)}
+        />
+        <p>
+          Pictures fetched ahead of the one you are looking at, so stepping
+          forward does not wait for the download. Zero fetches nothing ahead.
+        </p>
+      </Preference>
+    )
+  }
+
+  // A number typed into a box: kept as it is typed, so a half-written number
+  // is not thrown away, and only saved once it is a number at all
+  handleNumberPref (name, value, fallback) {
+    const text = String(value == null ? '' : value).trim()
+    const n = Math.round(Number(text))
+    dispatch('updatePreferences', name,
+      text === '' || !Number.isFinite(n) || n < 0 ? fallback : n)
+  }
+
   // Whether the search box remembers what was typed into it
   searchHistoryCheckbox () {
     return (
@@ -345,6 +402,10 @@ class PreferencesPage extends React.Component {
           {this.playlistFollowsSearchCheckbox()}
           {this.searchHistoryCheckbox()}
           {this.castingCheckbox()}
+        </PreferencesSection>
+        <PreferencesSection title='Pictures'>
+          {this.slideshowSecondsField()}
+          {this.imagePreloadField()}
         </PreferencesSection>
         <PreferencesSection title='Default torrent app'>
           {this.defaultAppCheckboxes()}
