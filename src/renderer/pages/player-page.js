@@ -598,23 +598,35 @@ function renderImageControls (state) {
 function renderSlideshowSpeed (state) {
   const seconds = Number(state.saved.prefs.slideshowSeconds)
   const now = Number.isFinite(seconds) && seconds > 0 ? seconds : 6
-  const steps = [1, 2, 3, 5, 6, 10, 15, 20, 30, 60]
-  const offered = steps.includes(now) ? steps : steps.concat([now]).sort((a, b) => a - b)
 
   return (
-    <select
-      key='speed'
-      className='image-speed'
-      value={String(now)}
-      title='Seconds each picture is shown for'
-      aria-label='Seconds each picture is shown for'
-      onChange={(e) => dispatch('updatePreferences', 'slideshowSeconds', Number(e.target.value))}
-    >
-      {offered.map((value) => (
-        <option key={value} value={String(value)}>{value}s</option>
-      ))}
-    </select>
+    <span key='speed' className='image-speed'>
+      <input
+        type='number'
+        min='1'
+        max='600'
+        step='1'
+        value={String(now)}
+        title='Seconds each picture is shown for'
+        aria-label='Seconds each picture is shown for'
+        onChange={handleSpeedChange}
+      />
+      <span className='unit'>s</span>
+    </span>
   )
+}
+
+// Typed into, or stepped with the arrows. Anything that is not a number yet,
+// such as an empty box halfway through typing, is left alone rather than
+// written down as nought.
+function handleSpeedChange (e) {
+  const typed = String(e.target.value || '').trim()
+  if (typed === '') return
+
+  const seconds = Math.round(Number(typed))
+  if (!Number.isFinite(seconds) || seconds < 1) return
+
+  dispatch('updatePreferences', 'slideshowSeconds', Math.min(seconds, 600))
 }
 
 // "You stopped at 12:34 · Continue", offered briefly when a video is opened

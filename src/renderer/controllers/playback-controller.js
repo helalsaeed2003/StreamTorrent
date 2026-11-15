@@ -268,13 +268,24 @@ module.exports = class PlaybackController {
     else this.zoomImage(2, at)
   }
 
-  // Dragging a zoomed picture moves what is on show. The numbers are a
-  // fraction of the picture, so they do not depend on how big the window is.
+  /**
+   * Dragging a zoomed picture moves what is on show. The numbers coming in
+   * are how far the pointer moved as a fraction of the picture on screen.
+   *
+   * What moves is where the zoom is centred, and moving that centre by a
+   * tenth does not move the picture by a tenth: at twice the size the
+   * picture only has its own width again to travel across, so the shift is
+   * (zoom - 1) times smaller. Scaling by zoom / (zoom - 1) puts the picture
+   * back under the pointer, which is what dragging something should do.
+   */
   panImage (dx, dy) {
     const state = this.state
-    if ((state.playing.zoom || 1) <= 1) return
-    state.playing.zoomX = Math.max(0, Math.min(1, (state.playing.zoomX || 0.5) + dx))
-    state.playing.zoomY = Math.max(0, Math.min(1, (state.playing.zoomY || 0.5) + dy))
+    const zoom = state.playing.zoom || 1
+    if (zoom <= 1) return
+
+    const follow = zoom / Math.max(zoom - 1, 0.01)
+    state.playing.zoomX = Math.max(0, Math.min(1, (state.playing.zoomX || 0.5) + dx * follow))
+    state.playing.zoomY = Math.max(0, Math.min(1, (state.playing.zoomY || 0.5) + dy * follow))
   }
 
   // Play next file in list (if any)
