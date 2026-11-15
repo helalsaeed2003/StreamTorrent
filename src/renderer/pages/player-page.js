@@ -360,8 +360,10 @@ function renderImageViewer (state) {
         onLoad={dispatcher('imageLoaded')}
         onError={dispatcher('imageError')}
         onDoubleClick={handleImageDoubleClick}
-        onMouseDown={handleImageMouseDown}
-        onMouseMove={handleImagePan}
+        onPointerDown={handleImagePointerDown}
+        onPointerMove={handleImagePan}
+        onPointerUp={handleImagePointerRelease}
+        onPointerCancel={handleImagePointerRelease}
       />
     )
   }
@@ -457,8 +459,26 @@ function renderImageLoading (state) {
  * go lands the picture back on the window as a dropped file, which used to
  * be answered with "go back to the torrent list before creating a torrent".
  */
-function handleImageMouseDown (e) {
-  if (e.button === 0) e.preventDefault()
+function handleImagePointerDown (e) {
+  if (e.button !== 0) return
+  e.preventDefault()
+
+  // Zoomed in, the picture moves while it is being dragged, and once it has
+  // moved far enough the pointer is no longer over it: the moves stop
+  // arriving, the picture stands still, and it lurches when the pointer
+  // finds it again. Holding the pointer sends every move here until it is
+  // let go of, wherever the picture has got to.
+  try {
+    e.currentTarget.setPointerCapture(e.pointerId)
+  } catch (err) {}
+}
+
+function handleImagePointerRelease (e) {
+  try {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    }
+  } catch (err) {}
 }
 
 /**
@@ -469,8 +489,12 @@ function handleImageMouseDown (e) {
 function handleImagePan (e) {
   if (e.buttons !== 1) return
 
-  const box = e.currentTarget.getBoundingClientRect()
-  if (box.width === 0 || box.height === 0) return
+  // The laid-out size, which does not change as the picture is dragged
+  // about. Its size on screen is this times the zoom, and the zoom is what
+  // the far end works in.
+  const width = e.currentTarget.offsetWidth
+  const height = e.currentTarget.offsetHeight
+  if (!width || !height) return
 
   const native = e.nativeEvent || e
   const dx = native.movementX || 0
@@ -478,7 +502,7 @@ function handleImagePan (e) {
   if (dx === 0 && dy === 0) return
 
   // Dragging left looks at what is further right, so the sign is flipped
-  dispatch('panImage', -dx / box.width, -dy / box.height)
+  dispatch('panImage', -dx / width, -dy / height)
 }
 
 /**
