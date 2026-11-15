@@ -539,8 +539,11 @@ body.drag .app::after {
 }
 
 .torrent-details td.col-size {
-  width: 60px;
+  /* Wide enough for a folder's size and its file count side by side on one
+     line: the rows are a fixed height and the list is drawn from that */
+  width: 132px;
   text-align: right;
+  white-space: nowrap;
 }
 
 .torrent-details td.col-select {
@@ -1035,6 +1038,15 @@ video::-webkit-media-text-track-container {
 .torrent-details tr.folder-row td.col-size {
   opacity: 0.6;
   font-size: 11px;
+}
+
+/* The size reads first; the file count follows it, quieter */
+.torrent-details tr.folder-row .folder-size {
+  font-weight: 600;
+}
+
+.torrent-details tr.folder-row .folder-files {
+  opacity: 0.75;
 }
 
 /* The file that was played last: where the user left off */

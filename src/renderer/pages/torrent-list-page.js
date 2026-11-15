@@ -687,6 +687,7 @@ module.exports = class TorrentList extends React.Component {
   renderFolderRow (torrentSummary, node, depth, isExpanded) {
     const infoHash = torrentSummary.infoHash
     const fileCount = node.fileCount
+    const size = node.byteCount > 0 ? prettyBytes(node.byteCount) : null
 
     return (
       <tr
@@ -701,7 +702,13 @@ module.exports = class TorrentList extends React.Component {
           <span className='folder-name'>{node.name}</span>
         </td>
         <td className='col-progress' />
-        <td className='col-size'>{fileCount === 1 ? '1 file' : fileCount + ' files'}</td>
+        <td className='col-size'>
+          {size && <span className='folder-size'>{size}</span>}
+          <span className='folder-files'>
+            {(size ? ' · ' : '') +
+              (fileCount === 1 ? '1 file' : fileCount + ' files')}
+          </span>
+        </td>
         <td className='col-preload'>
           {this.renderFolderPreloadButton(torrentSummary, node)}
         </td>

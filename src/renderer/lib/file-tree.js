@@ -25,7 +25,8 @@ const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'bas
 //     name: 'Extras',           // '' for the root
 //     folders: [node, ...],     // sub-folders, sorted by name
 //     files: [{ file, index }], // files directly inside this folder
-//     fileCount: 42             // files in this folder and all its sub-folders
+//     fileCount: 42,            // files in this folder and all its sub-folders
+//     byteCount: 1234567        // their sizes added up, the same way down
 //   }
 // `index` is always the file's index in torrentSummary.files, which is what
 // every other part of the app (selections, progress, playback) keys off.
@@ -101,6 +102,7 @@ function makeNode (key, name) {
     folders: [],
     files: [],
     fileCount: 0,
+    byteCount: 0,
     // Only used while building; removed by finalize()
     byName: new Map()
   }
@@ -135,9 +137,15 @@ function finalize (node, sortByName) {
   }
 
   let count = node.files.length
+  let bytes = 0
+  for (const entry of node.files) {
+    bytes += (entry.file && entry.file.length) || 0
+  }
   for (const folder of node.folders) {
     finalize(folder, sortByName)
     count += folder.fileCount
+    bytes += folder.byteCount
   }
   node.fileCount = count
+  node.byteCount = bytes
 }
