@@ -1,7 +1,7 @@
 {
   "name": "streamtorrent",
   "description": "StreamTorrent - browse and preview torrent files without downloading everything. Based on WebTorrent Desktop.",
-  "version": "0.98.3",
+  "version": "0.98.4",
   "author": {
     "name": "helalsaeed2003",
     "url": "https://github.com/helalsaeed2003"

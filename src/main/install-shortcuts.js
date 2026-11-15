@@ -11,7 +11,7 @@
  * time without the two runs fighting over Squirrel's lock.
  */
 
-const { BrowserWindow, app, ipcMain, shell } = require('electron')
+const { app, shell } = require('electron')
 const path = require('path')
 const fs = require('fs')
 
@@ -23,7 +23,7 @@ const log = require('./log')
 const SHORTCUT_NAME = 'Stream Torrent'
 
 module.exports = {
-  askOnFirstRun,
+  applyChoice,
   reconcile,
   removeAll,
   SHORTCUT_NAME
@@ -176,54 +176,14 @@ function remember (changes, win) {
 }
 
 /**
- * Asked once, right after installing: a window of tick boxes, the way an
- * ordinary Windows installer asks.
+ * Puts the shortcuts the installer was asked for in place. The installer
+ * records the answers and the app writes the shortcuts, because the name on
+ * them and where they go are the app's business, and because an update has
+ * to be able to put back whatever was asked for the first time.
  */
-function askOnFirstRun (win) {
+function applyChoice (choice, win) {
   if (!isWindows()) return
 
-  const parent = win && !win.isDestroyed() ? win : undefined
-
-  const chooser = new BrowserWindow({
-    parent,
-    modal: !!parent,
-    width: 540,
-    height: 380,
-    useContentSize: true,
-    resizable: false,
-    minimizable: false,
-    maximizable: false,
-    fullscreenable: false,
-    show: false,
-    title: config.APP_NAME + ' Setup',
-    backgroundColor: '#1e1e1e',
-    autoHideMenuBar: true,
-    webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false
-    }
-  })
-
-  chooser.setMenuBarVisibility(false)
-  chooser.loadURL('file://' + path.join(config.STATIC_PATH, 'first-run.html'))
-  chooser.once('ready-to-show', () => chooser.show())
-
-  ipcMain.once('first-run-choice', (e, choice) => {
-    // The window goes first. What follows asks Windows a string of
-    // questions that take a moment each, and leaving the setup box sitting
-    // there until they are answered looks like it has stopped responding.
-    if (!chooser.isDestroyed()) chooser.close()
-    apply(choice, win).catch(err => log('could not finish setting up', err))
-  })
-
-  // Closing the window without answering leaves nothing behind: none of the
-  // boxes were ticked, so Squirrel's own shortcuts still go
-  chooser.on('closed', () => {
-    ipcMain.removeAllListeners('first-run-choice')
-  })
-}
-
-async function apply (choice, win) {
   clearSquirrelShortcuts()
 
   const want = { desktop: !!choice.desktop, startMenu: !!choice.startMenu }
@@ -233,36 +193,8 @@ async function apply (choice, win) {
   log('shortcuts kept: ' +
     (Object.keys(want).filter(k => want[k]).join(',') || 'none'))
 
-  // What was chosen, written down once rather than three times over
   remember({
     shortcutDesktop: want.desktop,
-    shortcutStartMenu: want.startMenu,
-    isFileHandler: !!choice.fileHandler
+    shortcutStartMenu: want.startMenu
   }, win)
-
-  // Nothing of ours has been registered yet on a first run, so there is
-  // nothing to unregister: saying no means leaving everything alone
-  if (!choice.fileHandler) {
-    log('torrent files and magnet links: left alone')
-    return
-  }
-
-  // Registered here rather than left to the page: what was asked for happens
-  // whether or not the page is listening by now
-  const handlers = require('./handlers')
-  try {
-    handlers.install()
-    log('torrent files and magnet links: ours')
-  } catch (err) {
-    log('could not register the handlers', err)
-    return
-  }
-
-  // Registering is not enough: Windows keeps the choice the user last made
-  // and that choice wins, so it has to be written too. Anything that cannot
-  // be written is left to Windows' own screen rather than quietly doing
-  // nothing.
-  const left = await handlers.takeAssociationsWin32()
-  log('still chosen elsewhere: ' + (left.join(', ') || 'nothing'))
-  if (left.length > 0) setTimeout(() => handlers.openDefaultAppsSettings(), 400)
 }

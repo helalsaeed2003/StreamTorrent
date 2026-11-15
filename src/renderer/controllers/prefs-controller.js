@@ -43,9 +43,10 @@ module.exports = class PrefsController {
   }
 
   // Updates a single property in the saved prefs
-  // For example: updatePreferences('isFileHandler', true)
+  // For example: updatePreferences('isTorrentHandler', true)
   update (property, value) {
-    if (property === 'isFileHandler') ipcRenderer.send('setDefaultFileHandler', value)
+    if (property === 'isTorrentHandler') ipcRenderer.send('setAssociation', 'torrentFiles', value)
+    else if (property === 'isMagnetHandler') ipcRenderer.send('setAssociation', 'magnetLinks', value)
     else if (property === 'startup') ipcRenderer.send('setStartup', value)
     else if (property === 'tempPath') return this.setTempFolder(value)
 

@@ -48,12 +48,9 @@ if (config.IS_PRODUCTION) {
   process.env.NODE_ENV = 'production'
 }
 
-let justInstalled = false
-
 if (process.platform === 'win32') {
   const squirrelWin32 = require('./squirrel-win32')
   shouldQuit = squirrelWin32.handleEvent(argv[0])
-  justInstalled = argv.includes('--squirrel-firstrun')
   argv = argv.filter((arg) => !arg.includes('--squirrel'))
 }
 
@@ -110,17 +107,16 @@ function init () {
       } catch (err) {}
     }, 60 * 1000)
 
-    // Straight after installing, ask which shortcuts to make. Every other
-    // start, put back whatever was asked for before: Squirrel writes its own
-    // pair again after each update, and they are named differently.
-    if (justInstalled) {
-      setTimeout(() => {
-        require('./install-shortcuts').askOnFirstRun(windows.main.win)
-      }, 2500)
-    } else if (process.platform === 'win32' && config.IS_PRODUCTION &&
+    // Straight after installing, carry out what the installer was asked for
+    // on its own page. Every other start, put back whatever was asked for
+    // before: Squirrel writes its own pair again after each update, and they
+    // are named differently.
+    if (process.platform === 'win32' && config.IS_PRODUCTION &&
       !config.IS_PORTABLE) {
       setTimeout(() => {
-        require('./install-shortcuts').reconcile(state.saved.prefs, windows.main.win)
+        require('./setup-answers')
+          .applyIfAny(state.saved.prefs, windows.main.win)
+          .catch(err => log.error('could not finish setting up: ' + err.message))
       }, 2500)
     }
 

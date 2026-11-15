@@ -2,10 +2,15 @@
 // Windows wants the choice made against a ProgId, not against the protocol
 // itself, which is how every other program registers one.
 const ASSOCIATIONS = [
-  { what: '.torrent', progId: 'com.streamtorrent.torrent' },
-  { what: 'magnet', progId: 'com.streamtorrent.magnet' },
-  { what: 'stream-magnet', progId: 'com.streamtorrent.stream-magnet' }
+  { what: '.torrent', progId: 'com.streamtorrent.torrent', kind: 'torrentFiles' },
+  { what: 'magnet', progId: 'com.streamtorrent.magnet', kind: 'magnetLinks' },
+  { what: 'stream-magnet', progId: 'com.streamtorrent.stream-magnet', kind: 'magnetLinks' }
 ]
+
+// Torrent files and magnet links are asked for separately, so everything here
+// takes a pair of flags saying which of the two is being talked about. Left
+// out means both, which is what every call that predates the split meant.
+const BOTH = { torrentFiles: true, magnetLinks: true }
 
 module.exports = {
   install,
@@ -13,7 +18,14 @@ module.exports = {
   isOverriddenWin32,
   takeAssociationsWin32,
   openDefaultAppsSettings,
+  associationsFor,
   ASSOCIATIONS
+}
+
+// The things Windows would have to be told about for this choice
+function associationsFor (which) {
+  const want = which || BOTH
+  return ASSOCIATIONS.filter(a => want[a.kind])
 }
 
 const config = require('../config')
@@ -24,20 +36,20 @@ const path = require('path')
 const PROG_ID = 'com.streamtorrent.torrent'
 const CAPABILITY_KEY = '\\Software\\StreamTorrent\\Capabilities'
 
-function install () {
+function install (which) {
   switch (process.platform) {
     case 'darwin': installDarwin()
       break
-    case 'win32': installWin32()
+    case 'win32': installWin32(which || BOTH)
       break
   }
 }
 
-function uninstall () {
+function uninstall (which) {
   switch (process.platform) {
     case 'darwin': uninstallDarwin()
       return Promise.resolve()
-    case 'win32': return uninstallWin32()
+    case 'win32': return uninstallWin32(which || BOTH)
   }
   return Promise.resolve()
 }
@@ -61,7 +73,7 @@ if (!config.IS_PRODUCTION) {
   EXEC_COMMAND.push(config.ROOT_PATH)
 }
 
-function installWin32 () {
+function installWin32 (which) {
   const Registry = require('winreg')
 
   const log = require('./log')
@@ -70,43 +82,50 @@ function installWin32 () {
     process.resourcesPath, 'app.asar.unpacked', 'static',
     path.basename(config.APP_FILE_ICON) + '.ico'
   )
-  registerProtocolHandlerWin32(
-    'magnet',
-    'URL:BitTorrent Magnet URL',
-    iconPath,
-    EXEC_COMMAND
-  )
-  registerProtocolHandlerWin32(
-    'stream-magnet',
-    'URL:BitTorrent Stream-Magnet URL',
-    iconPath,
-    EXEC_COMMAND
-  )
 
-  // The same two under names of our own. Windows records which program opens
-  // a link by its ProgId, so a protocol needs one as well as the protocol key
-  // itself, the way every other program registers one.
-  registerProtocolHandlerWin32(
-    progIdFor('magnet'),
-    'URL:BitTorrent Magnet URL',
-    iconPath,
-    EXEC_COMMAND
-  )
-  registerProtocolHandlerWin32(
-    progIdFor('stream-magnet'),
-    'URL:BitTorrent Stream-Magnet URL',
-    iconPath,
-    EXEC_COMMAND
-  )
-  registerFileHandlerWin32(
-    '.torrent',
-    PROG_ID,
-    'BitTorrent Document',
-    iconPath,
-    EXEC_COMMAND
-  )
-  offerInOpenWithWin32('.torrent', PROG_ID)
-  registerCapabilitiesWin32()
+  if (which.magnetLinks) {
+    registerProtocolHandlerWin32(
+      'magnet',
+      'URL:BitTorrent Magnet URL',
+      iconPath,
+      EXEC_COMMAND
+    )
+    registerProtocolHandlerWin32(
+      'stream-magnet',
+      'URL:BitTorrent Stream-Magnet URL',
+      iconPath,
+      EXEC_COMMAND
+    )
+
+    // The same two under names of our own. Windows records which program opens
+    // a link by its ProgId, so a protocol needs one as well as the protocol key
+    // itself, the way every other program registers one.
+    registerProtocolHandlerWin32(
+      progIdFor('magnet'),
+      'URL:BitTorrent Magnet URL',
+      iconPath,
+      EXEC_COMMAND
+    )
+    registerProtocolHandlerWin32(
+      progIdFor('stream-magnet'),
+      'URL:BitTorrent Stream-Magnet URL',
+      iconPath,
+      EXEC_COMMAND
+    )
+  }
+
+  if (which.torrentFiles) {
+    registerFileHandlerWin32(
+      '.torrent',
+      PROG_ID,
+      'BitTorrent Document',
+      iconPath,
+      EXEC_COMMAND
+    )
+    offerInOpenWithWin32('.torrent', PROG_ID)
+  }
+
+  registerCapabilitiesWin32(which)
 
   /**
    * To add a protocol handler, the following keys must be added to the Windows registry:
@@ -253,7 +272,7 @@ function installWin32 () {
    * Default apps screen. Without this the user has no way of choosing it
    * there, however the file types themselves are registered.
    */
-  function registerCapabilitiesWin32 () {
+  function registerCapabilitiesWin32 (which) {
     const capabilities = new Registry({
       hive: Registry.HKCU,
       key: CAPABILITY_KEY
@@ -265,21 +284,27 @@ function installWin32 () {
         'Streams video out of torrents', () => {})
     })
 
-    const files = new Registry({
-      hive: Registry.HKCU,
-      key: CAPABILITY_KEY + '\\FileAssociations'
-    })
-    files.set('.torrent', Registry.REG_SZ, PROG_ID, (err) => {
-      if (err) log.error(err.message)
-    })
+    // Only what was asked for is claimed here, so Windows' own Default apps
+    // screen lists the app against those and nothing else
+    if (which.torrentFiles) {
+      const files = new Registry({
+        hive: Registry.HKCU,
+        key: CAPABILITY_KEY + '\\FileAssociations'
+      })
+      files.set('.torrent', Registry.REG_SZ, PROG_ID, (err) => {
+        if (err) log.error(err.message)
+      })
+    }
 
-    const urls = new Registry({
-      hive: Registry.HKCU,
-      key: CAPABILITY_KEY + '\\URLAssociations'
-    })
-    urls.set('magnet', Registry.REG_SZ, progIdFor('magnet'), (err) => {
-      if (err) log.error(err.message)
-    })
+    if (which.magnetLinks) {
+      const urls = new Registry({
+        hive: Registry.HKCU,
+        key: CAPABILITY_KEY + '\\URLAssociations'
+      })
+      urls.set('magnet', Registry.REG_SZ, progIdFor('magnet'), (err) => {
+        if (err) log.error(err.message)
+      })
+    }
 
     const registered = new Registry({
       hive: Registry.HKCU,
@@ -341,10 +366,11 @@ function isOverriddenWin32 (what) {
  * Only ever called when the user asks for it. Returns the ones it could not
  * take, so the caller can fall back to asking Windows.
  */
-async function takeAssociationsWin32 () {
-  if (process.platform !== 'win32') return ASSOCIATIONS.map(a => a.what)
+async function takeAssociationsWin32 (which) {
+  const wanted = associationsFor(which)
+  if (process.platform !== 'win32') return wanted.map(a => a.what)
 
-  const taken = await require('./user-choice').take(ASSOCIATIONS)
+  const taken = await require('./user-choice').take(wanted)
   require('./log')('could not take: ' + (taken.join(', ') || 'nothing'))
 
   return taken
@@ -357,31 +383,54 @@ function openDefaultAppsSettings () {
   shell.openExternal('ms-settings:defaultapps').catch(() => {})
 }
 
-async function uninstallWin32 () {
+async function uninstallWin32 (which) {
   const Registry = require('winreg')
+  const dropping = which || BOTH
 
   // Hand back what Windows records as ours before the registrations go, or
   // the choice would point at a program that no longer claims anything
   try {
-    await require('./user-choice').release(ASSOCIATIONS)
+    await require('./user-choice').release(associationsFor(dropping))
   } catch (err) {
     require('./log').error('could not hand the associations back: ' + err.message)
   }
 
-  unregisterProtocolHandlerWin32('magnet', EXEC_COMMAND)
-  unregisterProtocolHandlerWin32('stream-magnet', EXEC_COMMAND)
-  unregisterProtocolHandlerWin32(progIdFor('magnet'), EXEC_COMMAND)
-  unregisterProtocolHandlerWin32(progIdFor('stream-magnet'), EXEC_COMMAND)
-  unregisterFileHandlerWin32('.torrent', PROG_ID, EXEC_COMMAND)
-  forgetCapabilitiesWin32()
+  if (dropping.magnetLinks) {
+    unregisterProtocolHandlerWin32('magnet', EXEC_COMMAND)
+    unregisterProtocolHandlerWin32('stream-magnet', EXEC_COMMAND)
+    unregisterProtocolHandlerWin32(progIdFor('magnet'), EXEC_COMMAND)
+    unregisterProtocolHandlerWin32(progIdFor('stream-magnet'), EXEC_COMMAND)
+  }
+  if (dropping.torrentFiles) {
+    unregisterFileHandlerWin32('.torrent', PROG_ID, EXEC_COMMAND)
+  }
+  forgetCapabilitiesWin32(dropping)
 
   // The entries that only offer the app as a choice go too, so that nothing
-  // is left listing it once it no longer opens anything
-  function forgetCapabilitiesWin32 () {
-    new Registry({
-      hive: Registry.HKCU,
-      key: '\\Software\\Classes\\.torrent\\OpenWithProgids'
-    }).remove(PROG_ID, () => {})
+  // is left listing it once it no longer opens anything. What the app is
+  // still registered for stays: giving up magnet links does not take the
+  // torrent files with it.
+  function forgetCapabilitiesWin32 (dropping) {
+    if (dropping.torrentFiles) {
+      new Registry({
+        hive: Registry.HKCU,
+        key: '\\Software\\Classes\\.torrent\\OpenWithProgids'
+      }).remove(PROG_ID, () => {})
+
+      new Registry({
+        hive: Registry.HKCU,
+        key: CAPABILITY_KEY + '\\FileAssociations'
+      }).remove('.torrent', () => {})
+    }
+
+    if (dropping.magnetLinks) {
+      new Registry({
+        hive: Registry.HKCU,
+        key: CAPABILITY_KEY + '\\URLAssociations'
+      }).remove('magnet', () => {})
+    }
+
+    if (!dropping.torrentFiles || !dropping.magnetLinks) return
 
     new Registry({
       hive: Registry.HKCU,

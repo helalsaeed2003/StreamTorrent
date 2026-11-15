@@ -45,9 +45,12 @@ function run (state) {
 // Whenever the app is updated,  re-install default handlers if the user has
 // enabled them.
 function installHandlers (saved) {
-  if (saved.prefs.isFileHandler) {
-    const ipcRenderer = require('electron').ipcRenderer
-    ipcRenderer.send('setDefaultFileHandler', true)
+  const ipcRenderer = require('electron').ipcRenderer
+  if (saved.prefs.isTorrentHandler) {
+    ipcRenderer.send('setAssociation', 'torrentFiles', true)
+  }
+  if (saved.prefs.isMagnetHandler) {
+    ipcRenderer.send('setAssociation', 'magnetLinks', true)
   }
 }
 
@@ -251,4 +254,14 @@ function fillInNewSettings (saved) {
   if (saved.prefs.searchHistory == null) {
     saved.prefs.searchHistory = true
   }
+
+  // Torrent files and magnet links used to be one setting, taken or given up
+  // together. A config written before they were separated answers for both.
+  if (saved.prefs.isTorrentHandler == null) {
+    saved.prefs.isTorrentHandler = !!saved.prefs.isFileHandler
+  }
+  if (saved.prefs.isMagnetHandler == null) {
+    saved.prefs.isMagnetHandler = !!saved.prefs.isFileHandler
+  }
+  delete saved.prefs.isFileHandler
 }

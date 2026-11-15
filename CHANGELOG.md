@@ -4,6 +4,29 @@ All notable changes to StreamTorrent are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.98.4] - 2026-11-15
+
+### Changed
+
+- **The installer asks, instead of the app.** Setup now has the page every
+  Windows installer has — a desktop shortcut, a Start menu shortcut, opening
+  `.torrent` files, opening `magnet:` links — with a folder page before it.
+  The window that used to appear over the app after the first start is gone.
+  The answers are carried out the first time the app runs, because a shortcut
+  has to be named the way the app names it and a file association has to be
+  written by a program running as you.
+- **Torrent files and magnet links are now two settings, not one.** Either can
+  be taken without the other, on that page and in Preferences. A config that
+  answered for both keeps that answer.
+
+### Fixed
+
+- The setup questions never appeared at all with the new installer: the app
+  waited for a flag that only the old Squirrel installer passed.
+- Uninstalling left the shortcuts, the registered file types and the entry in
+  Windows' Default apps list behind. The uninstaller now takes back everything
+  it put there, and still leaves the torrent list and watch progress alone.
+
 ## [0.98.3] - 2026-11-13
 
 First public release. StreamTorrent is a fork of
@@ -94,4 +117,5 @@ what follows is what is different, and what the first release can do.
   preferences carried over from anyone.
 - Everything downloaded is deleted when the app quits.
 
+[0.98.4]: https://github.com/helalsaeed2003/StreamTorrent/releases/tag/v0.98.4
 [0.98.3]: https://github.com/helalsaeed2003/StreamTorrent/releases/tag/v0.98.3

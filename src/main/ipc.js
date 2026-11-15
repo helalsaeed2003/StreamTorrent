@@ -267,22 +267,28 @@ function init () {
    * File handlers
    */
 
-  ipcMain.on('setDefaultFileHandler', async (e, flag) => {
+  // `kind` is 'torrentFiles' or 'magnetLinks'. The two are asked for
+  // separately, so one can be taken without the other.
+  ipcMain.on('setAssociation', async (e, kind, flag) => {
     const handlers = require('./handlers')
+    const which = {
+      torrentFiles: kind === 'torrentFiles',
+      magnetLinks: kind === 'magnetLinks'
+    }
 
     try {
-      if (flag) handlers.install()
-      else await handlers.uninstall()
+      if (flag) handlers.install(which)
+      else await handlers.uninstall(which)
 
       // Registering is not enough: Windows keeps the choice the user last
       // made and that choice wins, so it has to be written too. Anything
       // that cannot be written is left to Windows' own screen.
       if (flag) {
-        const left = await handlers.takeAssociationsWin32()
+        const left = await handlers.takeAssociationsWin32(which)
         if (left.length > 0) setTimeout(() => handlers.openDefaultAppsSettings(), 400)
       }
     } catch (err) {
-      log('could not change what opens torrent files: ' + err.message)
+      log('could not change what opens ' + kind + ': ' + err.message)
     }
   })
 

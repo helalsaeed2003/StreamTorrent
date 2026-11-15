@@ -43,14 +43,21 @@ win:
   signAndEditExecutable: true
 
 nsis:
-  # Installs for this user only, with no administrator prompt, and runs the
-  # app when it finishes - the same as the installer this replaces
-  oneClick: true
+  # The ordinary Windows installer: a folder page, a page of tick boxes for
+  # shortcuts and file types (nsis/installer.nsh), then the install itself.
+  # Still for this user only, with no administrator prompt.
+  oneClick: false
   perMachine: false
-  allowToChangeInstallationDirectory: false
+  allowToChangeInstallationDirectory: true
 
-  # The app asks about shortcuts itself the first time it runs, and writes
-  # them itself, so the installer does not make any
+  # The page of tick boxes, and the uninstall that takes back what the app
+  # registered. The answers are written to the registry and carried out by
+  # the app on its first start - see src/main/setup-answers.js.
+  include: nsis/installer.nsh
+
+  # The installer makes no shortcuts of its own: the app writes them, named
+  # "Stream Torrent" and pointed at the stub, and puts back whatever was
+  # asked for after every update
   createDesktopShortcut: false
   createStartMenuShortcut: false
   shortcutName: Stream Torrent

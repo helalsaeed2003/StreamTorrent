@@ -26,6 +26,12 @@ class PreferencesPage extends React.Component {
     this.handleSetGlobalTrackers =
       this.handleSetGlobalTrackers.bind(this)
 
+    this.handleTorrentHandlerChange =
+      this.handleTorrentHandlerChange.bind(this)
+
+    this.handleMagnetHandlerChange =
+      this.handleMagnetHandlerChange.bind(this)
+
     this.handleTempPathChange = this.handleTempPathChange.bind(this)
     this.handleTempPathReset = this.handleTempPathReset.bind(this)
     this.handleClearTempNow = this.handleClearTempNow.bind(this)
@@ -108,22 +114,23 @@ class PreferencesPage extends React.Component {
     dispatch('updatePreferences', 'torrentsFolderPath', filePath)
   }
 
-  setDefaultAppButton () {
-    const isFileHandler = this.props.state.saved.prefs.isFileHandler
-    if (isFileHandler) {
-      return (
-        <Preference>
-          <p>{config.APP_NAME} is your default torrent app. Hooray!</p>
-        </Preference>
-      )
-    }
+  // The two are separate: a lot of people want magnet links caught without
+  // .torrent files being taken over, or the other way round
+  defaultAppCheckboxes () {
+    const prefs = this.props.state.saved.prefs
     return (
       <Preference>
-        <p>{config.APP_NAME} is not currently the default torrent app.</p>
-        <RaisedButton
+        <Checkbox
           className='control'
-          onClick={this.handleSetDefaultApp}
-          label={'Make ' + config.APP_NAME + ' the default'}
+          checked={!!prefs.isTorrentHandler}
+          label={'Open .torrent files with ' + config.APP_NAME}
+          onCheck={this.handleTorrentHandlerChange}
+        />
+        <Checkbox
+          className='control'
+          checked={!!prefs.isMagnetHandler}
+          label={'Open magnet links with ' + config.APP_NAME}
+          onCheck={this.handleMagnetHandlerChange}
         />
       </Preference>
     )
@@ -167,8 +174,12 @@ class PreferencesPage extends React.Component {
     dispatch('updatePreferences', 'soundNotifications', isChecked)
   }
 
-  handleSetDefaultApp () {
-    dispatch('updatePreferences', 'isFileHandler', true)
+  handleTorrentHandlerChange (e, isChecked) {
+    dispatch('updatePreferences', 'isTorrentHandler', isChecked)
+  }
+
+  handleMagnetHandlerChange (e, isChecked) {
+    dispatch('updatePreferences', 'isMagnetHandler', isChecked)
   }
 
   setGlobalTrackers () {
@@ -336,7 +347,7 @@ class PreferencesPage extends React.Component {
           {this.castingCheckbox()}
         </PreferencesSection>
         <PreferencesSection title='Default torrent app'>
-          {this.setDefaultAppButton()}
+          {this.defaultAppCheckboxes()}
         </PreferencesSection>
         <PreferencesSection title='General'>
           {this.setStartupCheckbox()}

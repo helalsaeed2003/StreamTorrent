@@ -175,7 +175,8 @@ function setupStateSaved () {
   const saved = {
     prefs: {
       downloadPath: config.DEFAULT_DOWNLOAD_PATH,
-      isFileHandler: false,
+      isTorrentHandler: false, /* .torrent files open in StreamTorrent */
+      isMagnetHandler: false, /* magnet links open in StreamTorrent */
       startup: false,
       soundNotifications: true,
       autoAddTorrents: false,
