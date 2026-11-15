@@ -406,6 +406,7 @@ const dispatchHandlers = {
   jumpImages: (by) => controllers.playback().jumpImages(by),
   applySelections: (infoHash) => controllers.torrentList().applySelections(infoHash),
   toggleSlideshow: (on) => controllers.playback().toggleSlideshow(on),
+  toggleImageAutoFit: (on) => controllers.playback().toggleImageAutoFit(on),
   zoomImageBy: (steps, at) => controllers.playback().zoomImageBy(steps, at),
   toggleImageZoom: (at) => controllers.playback().toggleImageZoom(at),
   panImage: (dx, dy) => controllers.playback().panImage(dx, dy),

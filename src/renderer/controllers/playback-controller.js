@@ -246,6 +246,21 @@ module.exports = class PlaybackController {
     this.zoomImage(was * Math.pow(1.25, steps), at)
   }
 
+  /**
+   * Fills the window with the picture rather than fitting the whole of it on
+   * screen. The edges of a picture shaped differently from the window are cut
+   * off, which is what filling the window means.
+   */
+  toggleImageAutoFit (on) {
+    const state = this.state
+    const wanted = on == null ? !state.saved.prefs.imageAutoFit : !!on
+    dispatch('updatePreferences', 'imageAutoFit', wanted)
+
+    // Zooming on top of a picture that already fills the window makes nothing
+    // clearer, so it goes back to the whole picture
+    if (wanted) this.zoomImage(1)
+  }
+
   // Double click: all the way out, or twice the size, around that point
   toggleImageZoom (at) {
     const state = this.state

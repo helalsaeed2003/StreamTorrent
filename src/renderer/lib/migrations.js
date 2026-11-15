@@ -261,6 +261,9 @@ function fillInNewSettings (saved) {
   if (saved.prefs.imagePreloadCount == null) {
     saved.prefs.imagePreloadCount = 10
   }
+  if (saved.prefs.imageAutoFit == null) {
+    saved.prefs.imageAutoFit = false
+  }
 
   // Torrent files and magnet links used to be one setting, taken or given up
   // together. A config written before they were separated answers for both.

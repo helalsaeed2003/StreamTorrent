@@ -345,7 +345,8 @@ function renderImageViewer (state) {
       <img
         key={'image-' + state.playing.fileIndex}
         className={'image-view' + (isLoaded ? '' : ' loading') +
-          (zoom > 1 ? ' zoomed' : '')}
+          (zoom > 1 ? ' zoomed' : '') +
+          (state.saved.prefs.imageAutoFit ? ' auto-fit' : '')}
         src={url}
         alt={state.playing.fileName}
         draggable={false}
@@ -482,9 +483,9 @@ function handleImagePan (e) {
 
 /**
  * The bar along the bottom of the image viewer: the file name, the buttons
- * in the middle, and full screen on the right. The buttons are the ones a
- * player has - ten back, one back, play, one on, ten on - because that is
- * what the keys do as well.
+ * in the middle, and how the picture is fitted on the right. The buttons are
+ * the ones a player has - ten back, one back, play, one on, ten on - because
+ * that is what the keys do as well.
  */
 function renderImageControls (state) {
   const position = Playlist.getPosition(state)
@@ -493,6 +494,7 @@ function renderImageControls (state) {
   const backTenClass = Playlist.getIndexAhead(state, -10, true) == null ? 'disabled' : ''
   const onTenClass = Playlist.getIndexAhead(state, 10, true) == null ? 'disabled' : ''
   const running = !!state.playing.slideshow
+  const autoFit = !!state.saved.prefs.imageAutoFit
 
   return (
     <div
@@ -507,63 +509,62 @@ function renderImageControls (state) {
       <div key='deck' className='image-deck'>
         {position
           ? (
-            <div key='count' className='image-count'>
+            <span key='count' className='image-count'>
               {position.at} of {position.total}
-            </div>
+            </span>
             )
           : null}
-        <div key='buttons' className='image-buttons'>
-          <i
-            key='back-ten'
-            className={'icon ' + backTenClass}
-            onClick={dispatcher('jumpImages', -10)}
-            role='button'
-            title='Back ten (down arrow or S)'
-            aria-label='Back ten images'
-          >
-            fast_rewind
-          </i>
-          <i
-            key='skip-previous'
-            className={'icon ' + prevClass}
-            onClick={dispatcher('previousTrack')}
-            role='button'
-            title='Previous (left arrow or A)'
-            aria-label='Previous image'
-          >
-            skip_previous
-          </i>
-          <i
-            key='play-pause'
-            className='icon play-pause'
-            onClick={dispatcher('toggleSlideshow')}
-            role='button'
-            title={running ? 'Stop the slideshow (space)' : 'Start the slideshow (space)'}
-            aria-label={running ? 'Stop the slideshow' : 'Start the slideshow'}
-          >
-            {running ? 'pause' : 'play_arrow'}
-          </i>
-          <i
-            key='skip-next'
-            className={'icon ' + nextClass}
-            onClick={dispatcher('nextTrack')}
-            role='button'
-            title='Next (right arrow or D)'
-            aria-label='Next image'
-          >
-            skip_next
-          </i>
-          <i
-            key='on-ten'
-            className={'icon ' + onTenClass}
-            onClick={dispatcher('jumpImages', 10)}
-            role='button'
-            title='On ten (up arrow or W)'
-            aria-label='On ten images'
-          >
-            fast_forward
-          </i>
-        </div>
+        <i
+          key='back-ten'
+          className={'icon ' + backTenClass}
+          onClick={dispatcher('jumpImages', -10)}
+          role='button'
+          title='Back ten (down arrow or S)'
+          aria-label='Back ten images'
+        >
+          fast_rewind
+        </i>
+        <i
+          key='skip-previous'
+          className={'icon step back ' + prevClass}
+          onClick={dispatcher('previousTrack')}
+          role='button'
+          title='Previous (left arrow or A)'
+          aria-label='Previous image'
+        >
+          play_arrow
+        </i>
+        <i
+          key='play-pause'
+          className='icon play-pause'
+          onClick={dispatcher('toggleSlideshow')}
+          role='button'
+          title={running ? 'Stop the slideshow (space)' : 'Start the slideshow (space)'}
+          aria-label={running ? 'Stop the slideshow' : 'Start the slideshow'}
+        >
+          {running ? 'pause' : 'play_arrow'}
+        </i>
+        <i
+          key='skip-next'
+          className={'icon step ' + nextClass}
+          onClick={dispatcher('nextTrack')}
+          role='button'
+          title='Next (right arrow or D)'
+          aria-label='Next image'
+        >
+          play_arrow
+        </i>
+        <i
+          key='on-ten'
+          className={'icon ' + onTenClass}
+          onClick={dispatcher('jumpImages', 10)}
+          role='button'
+          title='On ten (up arrow or W)'
+          aria-label='On ten images'
+        >
+          fast_forward
+        </i>
+        {renderSlideshowSpeed(state)}
       </div>
 
       <i
@@ -576,7 +577,43 @@ function renderImageControls (state) {
       >
         {state.window.isFullScreen ? 'fullscreen_exit' : 'fullscreen'}
       </i>
+      <i
+        key='auto-fit'
+        className={'icon auto-fit float-right' + (autoFit ? ' on' : '')}
+        onClick={dispatcher('toggleImageAutoFit')}
+        role='button'
+        title={autoFit
+          ? 'Filling the window: the edges of the picture are cut off'
+          : 'Fit the picture to the window, filling it'}
+        aria-label='Fill the window with the picture'
+      >
+        aspect_ratio
+      </i>
     </div>
+  )
+}
+
+// How long each slide is shown for, beside the buttons, so it can be changed
+// without opening Preferences. The same setting, written to the same place.
+function renderSlideshowSpeed (state) {
+  const seconds = Number(state.saved.prefs.slideshowSeconds)
+  const now = Number.isFinite(seconds) && seconds > 0 ? seconds : 6
+  const steps = [1, 2, 3, 5, 6, 10, 15, 20, 30, 60]
+  const offered = steps.includes(now) ? steps : steps.concat([now]).sort((a, b) => a - b)
+
+  return (
+    <select
+      key='speed'
+      className='image-speed'
+      value={String(now)}
+      title='Seconds each picture is shown for'
+      aria-label='Seconds each picture is shown for'
+      onChange={(e) => dispatch('updatePreferences', 'slideshowSeconds', Number(e.target.value))}
+    >
+      {offered.map((value) => (
+        <option key={value} value={String(value)}>{value}s</option>
+      ))}
+    </select>
   )
 }
 

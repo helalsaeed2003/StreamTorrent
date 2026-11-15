@@ -199,6 +199,7 @@ function setupStateSaved () {
       playlistFollowsSearch: true, /* Next and Previous follow an open search */
       slideshowSeconds: 6, /* image viewer: how long each picture is shown */
       imagePreloadCount: 10, /* image viewer: pictures fetched ahead */
+      imageAutoFit: false, /* image viewer: fill the window, cutting the edges */
       searchHistory: true /* the search box remembers and offers what was typed */
     },
     torrents: config.DEFAULT_TORRENTS.map(createTorrentObject),

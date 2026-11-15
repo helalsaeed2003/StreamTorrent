@@ -1155,48 +1155,107 @@ video::-webkit-media-text-track-container {
   pointer-events: none;
 }
 
-/* The buttons sit in the middle of the bar, whatever the file is called */
+/*
+ * The buttons sit in the middle of the bar, whatever the file is called, and
+ * inside it rather than above it: the bar is 38px and everything here is
+ * centred in that.
+ */
 .player .controls.image-controls .image-deck {
   position: absolute;
   left: 50%;
-  bottom: 8px;
+  top: 0;
+  height: 38px;
   transform: translateX(-50%);
-  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 2px;
   -webkit-app-region: no-drag;
 }
 
 .player .controls.image-controls .image-count {
-  font-size: 12px;
+  font-size: 11px;
   opacity: 0.7;
-  margin-bottom: 2px;
+  margin-right: 8px;
+  white-space: nowrap;
 }
 
-.player .controls.image-controls .image-buttons {
+/*
+ * The icons in the bar are clipped to a uniform 23px, which cuts the right
+ * half off anything wider - fast_forward lost its second triangle and no
+ * longer matched fast_rewind. These are sized to the glyph instead.
+ */
+.player .controls.image-controls .image-deck .icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-}
-
-.player .controls.image-controls .image-buttons .icon {
-  font-size: 28px;
-  padding: 2px 4px;
+  width: 24px;
+  max-width: none;
+  height: 24px;
+  margin: 0;
+  font-size: 20px;
+  line-height: 1;
+  overflow: visible;
   opacity: 0.85;
   cursor: default;
   user-select: none;
 }
 
-.player .controls.image-controls .image-buttons .icon:hover {
+.player .controls.image-controls .image-deck .icon:hover {
   opacity: 1;
 }
 
-.player .controls.image-controls .image-buttons .icon.disabled {
+.player .controls.image-controls .image-deck .icon.disabled {
   opacity: 0.25;
   pointer-events: none;
 }
 
-.player .controls.image-controls .image-buttons .icon.play-pause {
-  font-size: 36px;
+.player .controls.image-controls .image-deck .icon.play-pause {
+  width: 26px;
+  height: 26px;
+  font-size: 24px;
+}
+
+/*
+ * One picture back and one on are plain triangles. The font bundled here has
+ * no arrow_left or arrow_right - they come out as those words - so the play
+ * triangle is used, turned round for going back.
+ */
+.player .controls.image-controls .image-deck .icon.step {
+  font-size: 18px;
+}
+
+.player .controls.image-controls .image-deck .icon.step.back {
+  transform: rotate(180deg);
+}
+
+/* How long a slide is shown for, next to the buttons */
+.player .controls.image-controls .image-speed {
+  margin-left: 8px;
+  padding: 1px 2px;
+  font-family: inherit;
+  font-size: 11px;
+  color: #eee;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 3px;
+  cursor: default;
+  -webkit-app-region: no-drag;
+}
+
+.player .controls.image-controls .image-speed:hover {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+/* On, the picture fills the window; off, all of it is on screen */
+.player .controls.image-controls .icon.auto-fit.on {
+  opacity: 1;
+  color: #4a90d9;
+}
+
+.player .image-view.auto-fit {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 /*
