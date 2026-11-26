@@ -61,11 +61,16 @@ function create () {
     skipTaskbar: true,
     hasShadow: false,
     backgroundColor: '#202020',
-    // The menu can be given focus, so that its sliders can be dragged and its
-    // buttons pressed while the app is in the background. A window that cannot
-    // be given focus is never activated by a click, and on Windows the press
-    // is swallowed. The focus goes back to the player when the menu closes.
-    focusable: true,
+    // The menu never takes the focus. Its rows, buttons and sliders work on
+    // mouse events alone, which a window that cannot be activated still
+    // receives, and the player keeps the focus: looking away from the app then
+    // blurs the main window, which is what puts the menu away. While the menu
+    // could be activated, a press in it took the focus off the player, and
+    // looking away afterwards blurred the menu instead, which nothing was
+    // listening for, so the menu stayed on screen over the picture.
+    // Activating a window that is not the full-screen one is also what makes
+    // Windows bring its taskbar out in front of the picture.
+    focusable: false,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -110,6 +115,7 @@ function watch (main) {
     main.webContents.send('player-menu-closed')
   })
 }
+
 
 function show (payload) {
   const win = create()

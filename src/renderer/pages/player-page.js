@@ -25,7 +25,7 @@ module.exports = class Player extends React.Component {
       return (
         <div
           className='player image-player'
-          onMouseMove={dispatcher('mediaMouseMoved')}
+          onMouseMove={handleMouseMove}
         >
           {renderImageViewer(state)}
           {renderImageControls(state)}
@@ -41,7 +41,7 @@ module.exports = class Player extends React.Component {
       <div
         className={'player' + (isVideo ? ' mpv-player' : '')}
         onWheel={handleVolumeWheel}
-        onMouseMove={dispatcher('mediaMouseMoved')}
+        onMouseMove={handleMouseMove}
       >
         {showVideo
           ? (isVideo ? renderMpvVideo(state) : renderMedia(state))
@@ -65,6 +65,13 @@ module.exports = class Player extends React.Component {
 }
 
 // Handles volume change by wheel
+// The pointer's own position goes with the move, so that a mousemove sent
+// because a window came or went under the pointer, rather than because the
+// pointer moved, is ignored
+function handleMouseMove (e) {
+  dispatch('mediaMouseMoved', undefined, e.screenX, e.screenY)
+}
+
 function handleVolumeWheel (e) {
   dispatch('changeVolume', (-e.deltaY | e.deltaX) / 500)
 }
@@ -85,7 +92,7 @@ function renderMpvVideo (state) {
     <div
       key='letterbox'
       className='letterbox mpv-video'
-      onMouseMove={dispatcher('mediaMouseMoved')}
+      onMouseMove={handleMouseMove}
       onClick={dispatcher('playPause')}
       onDoubleClick={dispatcher('toggleFullScreen')}
     >
@@ -259,7 +266,7 @@ function renderMedia (state) {
     <div
       key='letterbox'
       className='letterbox'
-      onMouseMove={dispatcher('mediaMouseMoved')}
+      onMouseMove={handleMouseMove}
     >
       {mediaTag}
       {renderOverlay(state)}
@@ -402,7 +409,7 @@ function renderImageViewer (state) {
     <div
       key='letterbox'
       className={'letterbox image-viewer' + (zoom > 1 ? ' zoomed' : '')}
-      onMouseMove={dispatcher('mediaMouseMoved')}
+      onMouseMove={handleMouseMove}
       onWheel={handleImageWheel}
     >
       {elems}

@@ -217,7 +217,39 @@
     // Speeds offered as one-tap buttons, as well as on the slider
     const SPEED_CHIPS = [0.5, 1, 1.25, 1.5, 2, 3]
 
-    ipcRenderer.on('player-menu-data', (e, data) => render(data))
+    // A slider being dragged must not be drawn again under the pointer. Every
+    // move sends the new value to the player, which sends the menu its state
+    // back, and redrawing then threw away the very element being dragged: the
+    // handle jumped to where the drag started and stayed there. While a drag
+    // is on, the new state is kept and drawn once the handle is let go.
+    let dragging = 0
+    let pending = null
+
+    ipcRenderer.on('player-menu-data', (e, data) => {
+      if (dragging > 0) {
+        pending = data
+        return
+      }
+      render(data)
+    })
+
+    function holdRender () {
+      dragging++
+    }
+
+    function releaseRender () {
+      if (dragging === 0) return
+      dragging = 0
+      if (pending) {
+        const data = pending
+        pending = null
+        render(data)
+      }
+    }
+
+    window.addEventListener('pointerup', releaseRender)
+    window.addEventListener('pointercancel', releaseRender)
+    window.addEventListener('blur', releaseRender)
 
     function act (action, ...args) {
       ipcRenderer.send('player-menu-action', action, args)
@@ -264,6 +296,9 @@
       input.step = step
       input.value = value
       input.addEventListener('input', () => onInput(Number(input.value)))
+      input.addEventListener('pointerdown', holdRender)
+      input.addEventListener('keydown', holdRender)
+      input.addEventListener('keyup', releaseRender)
       return input
     }
 
@@ -290,7 +325,10 @@
       const rate = Number(data.rate) || 1
 
       panel.appendChild(heading('Playback speed'))
-      panel.appendChild(el('div', 'value', rate.toFixed(2) + 'x'))
+      // Updated as the slider moves, since the menu is not drawn again while a
+      // handle is being dragged
+      const readout = el('div', 'value', rate.toFixed(2) + 'x')
+      panel.appendChild(readout)
 
       const row = el('div', 'slider-row')
       const minus = el('button', 'step', '−')
@@ -307,6 +345,7 @@
 
       function setRate (value) {
         const clamped = Math.round(Math.max(0.25, Math.min(4, value)) * 100) / 100
+        readout.textContent = clamped.toFixed(2) + 'x'
         act('setPlaybackRate', clamped)
       }
     }
@@ -363,7 +402,8 @@
       panel.appendChild(heading('Size'))
 
       const scale = Math.round((Number(data.scale) || 1) * 100)
-      panel.appendChild(el('div', 'value', scale + '%'))
+      const sizeReadout = el('div', 'value', scale + '%')
+      panel.appendChild(sizeReadout)
 
       const sizeRow = el('div', 'slider-row')
       const smaller = el('button', 'step', '−')
@@ -377,6 +417,7 @@
 
       function setScale (value) {
         const clamped = Math.max(50, Math.min(300, Math.round(value)))
+        sizeReadout.textContent = clamped + '%'
         act('setSubtitleScale', clamped / 100)
       }
     }

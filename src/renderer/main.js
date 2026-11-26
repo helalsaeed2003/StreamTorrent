@@ -458,7 +458,9 @@ const dispatchHandlers = {
   mediaError: (err) => controllers.media().mediaError(err),
   mediaSuccess: () => controllers.media().mediaSuccess(),
   mediaTimeUpdate: () => controllers.media().mediaTimeUpdate(),
-  mediaMouseMoved: (inControls) => controllers.media().mediaMouseMoved(inControls),
+  mediaMouseMoved: (inControls, x, y) =>
+    controllers.media().mediaMouseMoved(inControls, x, y),
+  controlsPointerGone: () => controllers.media().controlsPointerGone(),
   mediaControlsMouseEnter: () => controllers.media().controlsMouseEnter(),
   mediaControlsMouseLeave: () => controllers.media().controlsMouseLeave(),
 

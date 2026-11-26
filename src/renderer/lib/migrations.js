@@ -248,6 +248,11 @@ function fillInNewSettings (saved) {
   if (saved.prefs.playlistFollowsSearch == null) {
     saved.prefs.playlistFollowsSearch = true
   }
+  // Files inside a torrent are listed by name. Left in the torrent's own
+  // order, a torrent built back to front reads back to front.
+  if (saved.prefs.sortByName == null) {
+    saved.prefs.sortByName = true
+  }
   if (!Array.isArray(saved.searchHistory)) {
     saved.searchHistory = []
   }

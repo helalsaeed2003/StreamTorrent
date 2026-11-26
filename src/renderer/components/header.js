@@ -1,13 +1,20 @@
 const React = require('react')
 
-const { dispatcher } = require('../lib/dispatcher')
+const { dispatch, dispatcher } = require('../lib/dispatcher')
+
+// The pointer's own position goes with the move, so that a mousemove sent
+// because a window came or went under the pointer, rather than because it
+// moved, is ignored
+function handleMouseMove (e) {
+  dispatch('mediaMouseMoved', undefined, e.screenX, e.screenY)
+}
 
 class Header extends React.Component {
   render () {
     return (
       <div
         className='header'
-        onMouseMove={dispatcher('mediaMouseMoved')}
+        onMouseMove={handleMouseMove}
         onMouseEnter={dispatcher('mediaControlsMouseEnter')}
         onMouseLeave={dispatcher('mediaControlsMouseLeave')}
         role='navigation'

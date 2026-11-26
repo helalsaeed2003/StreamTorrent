@@ -4,6 +4,33 @@ All notable changes to StreamTorrent are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.98.6] - 2026-11-27
+
+### Changed
+
+- **The files inside a torrent are listed by name**, counting numbers as
+  numbers, so part 2 comes before part 10. A torrent that lists its own files
+  back to front no longer reads back to front. Folders were already listed
+  this way. There is a setting for it in Preferences, under "Files in a
+  torrent", as well as the item on a torrent's right-click menu.
+
+### Fixed
+
+- The sliders in the subtitle and speed menus could not be dragged: the handle
+  jumped to where it was clicked and stayed there. Every move sent the new
+  value to the player, whose answer drew the menu again and threw away the very
+  handle being dragged. The menu now waits until the handle is let go.
+- A menu left open stayed on screen after clicking away from the app, if it had
+  been clicked in first. The main window had lost the focus long before and
+  sent no second word of it.
+- In full screen, pressing anything on the bars brought the Windows taskbar out
+  in front of the picture. The bars are windows of their own, and activating a
+  window that is not the full-screen one is what makes Windows do that; while
+  the app is the active window they no longer take the focus at all.
+- The bars jumped back up for a moment after going away. A window appearing or
+  going away under the pointer makes Chromium report a mouse move although the
+  pointer has not moved, which was taken for someone reaching for the controls.
+
 ## [0.98.5] - 2026-11-16
 
 ### Pictures
@@ -157,6 +184,7 @@ what follows is what is different, and what the first release can do.
   preferences carried over from anyone.
 - Everything downloaded is deleted when the app quits.
 
+[0.98.6]: https://github.com/helalsaeed2003/StreamTorrent/releases/tag/v0.98.6
 [0.98.5]: https://github.com/helalsaeed2003/StreamTorrent/releases/tag/v0.98.5
 [0.98.4]: https://github.com/helalsaeed2003/StreamTorrent/releases/tag/v0.98.4
 [0.98.3]: https://github.com/helalsaeed2003/StreamTorrent/releases/tag/v0.98.3

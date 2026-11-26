@@ -60,11 +60,29 @@ module.exports = class MediaController {
     }
   }
 
-  mediaMouseMoved (inControls) {
+  mediaMouseMoved (inControls, x, y) {
+    // A window appearing or going away under the pointer makes Chromium send a
+    // mousemove although the pointer has not moved an inch. Counting that as
+    // movement put the bars straight back up the moment they went away, so
+    // they jumped up and down once or twice before settling. A move to exactly
+    // where the pointer already was is no move.
+    if (x != null && y != null) {
+      const last = this.lastMouseAt
+      if (last && last.x === x && last.y === y) return
+      this.lastMouseAt = { x, y }
+    }
+
     this.state.playing.mouseStationarySince = new Date().getTime()
     // The bars are drawn in a window of their own, which says when the
     // pointer is resting on one of them
     if (inControls !== undefined) this.state.playing.mouseInControls = !!inControls
+  }
+
+  // The bars gave up the pointer without it going anywhere the page can see,
+  // because their window lost the focus. They are free to go, and the wait
+  // before they do is not started again.
+  controlsPointerGone () {
+    this.state.playing.mouseInControls = false
   }
 
   controlsMouseEnter () {

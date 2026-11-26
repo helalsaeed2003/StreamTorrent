@@ -280,7 +280,11 @@ function listen () {
   window.addEventListener('mousedown', () => ipcRenderer.send('player-chrome-focus'), true)
 
   // The pointer being on a bar keeps the bars up
-  window.addEventListener('mousemove', () => act('mediaMouseMoved', true))
+  // Where the pointer is goes with it: a window coming or going under the
+  // pointer makes Chromium send a mousemove although nothing moved, and the
+  // player ignores a move to where the pointer already was
+  window.addEventListener('mousemove',
+    e => act('mediaMouseMoved', true, e.screenX, e.screenY))
 
   // ...and once it leaves, they are free to go again. Without this the bars
   // would stay up for good, since the picture below them is mpv's own window
@@ -292,7 +296,9 @@ function listen () {
       hover(false)
     }
   })
-  window.addEventListener('blur', () => act('mediaMouseMoved', false))
+  // Losing the focus is not the pointer moving: the bars give it up, and the
+  // wait before they go is left where it was
+  window.addEventListener('blur', () => act('controlsPointerGone'))
   window.addEventListener('wheel', e => {
     act('changeVolume', (-e.deltaY | e.deltaX) / 500)
   })

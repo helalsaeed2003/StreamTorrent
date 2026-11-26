@@ -197,6 +197,7 @@ function setupStateSaved () {
       globalTrackers: defaultAnnounceList,
       tempPath: '', /* '' means the default folder, inside the program folder */
       playlistFollowsSearch: true, /* Next and Previous follow an open search */
+      sortByName: true, /* list a torrent's files by name, not in its own order */
       slideshowSeconds: 6, /* image viewer: how long each picture is shown */
       imagePreloadCount: 10, /* image viewer: pictures fetched ahead */
       imageAutoFit: false, /* image viewer: fill the window, cutting the edges */

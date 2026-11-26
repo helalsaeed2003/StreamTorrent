@@ -153,13 +153,14 @@ function create (part) {
     fullscreenable: false,
     skipTaskbar: true,
     hasShadow: false,
-    // The bars can be given focus, so that pressing one while the app is in
-    // the background does what it would in any other window: brings the app
-    // forward and presses the button. A window that cannot be given focus is
-    // never activated by a click, and on Windows the press is swallowed. The
-    // focus is handed straight back to the main window below, so the keyboard
-    // still reaches the player.
-    focusable: !passThrough,
+    // The bars never take the focus. Their buttons work on mouse events
+    // alone, which a window that cannot be activated still receives, and the
+    // keyboard stays with the player where the space bar and the arrow keys
+    // belong. Activating a window that is not the full-screen one is also what
+    // makes Windows bring its taskbar out in front of the picture. A press
+    // while the app is in the background brings the app forward itself, from
+    // the page: see 'player-chrome-focus'.
+    focusable: false,
     transparent: floating,
     backgroundColor: floating ? '#00000000' : '#101010',
     webPreferences: {
@@ -174,17 +175,6 @@ function create (part) {
   if (passThrough) win.setIgnoreMouseEvents(true)
   if (!floating) win.setOpacity(OPACITY)
 
-  // Whatever was pressed has been dealt with by then, and the keyboard goes
-  // back to the player, where the space bar and the arrow keys belong
-  if (!passThrough) {
-    win.on('focus', () => {
-      setTimeout(() => {
-        const owner = require('./main').win
-        if (owner && !owner.isDestroyed() && !owner.isFocused()) owner.focus()
-        raise()
-      }, 150)
-    })
-  }
   win.loadURL('file://' + path.join(config.STATIC_PATH, 'player-chrome.html') +
     '?part=' + part)
 

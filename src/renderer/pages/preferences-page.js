@@ -287,6 +287,28 @@ class PreferencesPage extends React.Component {
     )
   }
 
+  // How the files inside a torrent are ordered in the list
+  sortByNameCheckbox () {
+    return (
+      <Preference>
+        <Checkbox
+          className='control'
+          checked={this.props.state.saved.prefs.sortByName !== false}
+          label='Sort files by name'
+          onCheck={(e, value) =>
+            dispatch('updatePreferences', 'sortByName', value)}
+        />
+        <p>
+          The files inside a torrent are listed by name, counting numbers as
+          numbers, so part 2 comes before part 10. With this off they are
+          listed in the order the torrent itself puts them in, which can be
+          any order at all. Folders are always listed by name. The same
+          setting is on the right-click menu of a torrent.
+        </p>
+      </Preference>
+    )
+  }
+
   // What Next and Previous do while a search is open
   playlistFollowsSearchCheckbox () {
     return (
@@ -396,6 +418,9 @@ class PreferencesPage extends React.Component {
           {this.tempPathSelector()}
           {this.autoAddTorrentsCheckbox()}
           {this.torrentsFolderPathSelector()}
+        </PreferencesSection>
+        <PreferencesSection title='Files in a torrent'>
+          {this.sortByNameCheckbox()}
         </PreferencesSection>
         <PreferencesSection title='Playback'>
           {this.highestPlaybackPriorityCheckbox()}
