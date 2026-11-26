@@ -25,8 +25,9 @@ numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   sent no second word of it.
 - In full screen, pressing anything on the bars brought the Windows taskbar out
   in front of the picture. The bars are windows of their own, and activating a
-  window that is not the full-screen one is what makes Windows do that; while
-  the app is the active window they no longer take the focus at all.
+  window that is not the full-screen one is what makes Windows do that. They
+  no longer take the focus at all: a press on one works on mouse events, which
+  a window that cannot be activated still receives.
 - The bars jumped back up for a moment after going away. A window appearing or
   going away under the pointer makes Chromium report a mouse move although the
   pointer has not moved, which was taken for someone reaching for the controls.
