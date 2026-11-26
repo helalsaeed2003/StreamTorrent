@@ -116,7 +116,6 @@ function watch (main) {
   })
 }
 
-
 function show (payload) {
   const win = create()
   if (!win) return
